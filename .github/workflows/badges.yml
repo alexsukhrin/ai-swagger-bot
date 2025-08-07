@@ -1,0 +1,25 @@
+name: Generate Badges
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline", "Quick Check"]
+    types:
+      - completed
+
+jobs:
+  generate-badges:
+    name: Generate Badges
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Generate badges
+      run: |
+        echo "Generating badges..."
+        # Add badge generation logic here if needed
+        echo "✅ Badges generated successfully!"

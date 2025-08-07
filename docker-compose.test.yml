@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  test:
+    build: .
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./tests:/app/tests
+      - ./src:/app/src
+      - ./examples:/app/examples
+    command: pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
+    
+  lint:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./examples:/app/examples
+    command: |
+      sh -c "
+        black --check --diff src/ tests/ examples/ &&
+        isort --check-only --diff src/ tests/ examples/ &&
+        ruff check src/ tests/ examples/ &&
+        mypy src/ --ignore-missing-imports --no-strict-optional
+      "
+      
+  security:
+    build: .
+    volumes:
+      - ./src:/app/src
+    command: bandit -r src/ -f json -o bandit-report.json
+    
+  format:
+    build: .
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./examples:/app/examples
+    command: |
+      sh -c "
+        black src/ tests/ examples/ &&
+        isort src/ tests/ examples/ &&
+        ruff check --fix src/ tests/ examples/
+      "
