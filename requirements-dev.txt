@@ -19,7 +19,7 @@ mkdocs-material==9.5.3
 
 # Development tools
 pre-commit==3.6.0
-mypy==1.8.0
+mypy==1.17.1
 bandit==1.7.5
 
 # Jupyter for examples
