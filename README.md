@@ -21,7 +21,7 @@
 ### 1. Клонування репозиторію
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/alexandrsukhryn/ai-swagger-bot.git
 cd ai-swagger-bot
 ```
 
@@ -45,6 +45,9 @@ pip install -r requirements.txt
 
 # Для розробки (з лінтерами та тестами)
 pip install -r requirements-dev.txt
+
+# Або використовуйте Makefile
+make install-dev
 ```
 
 ### 4. Налаштування змінних середовища
@@ -60,6 +63,19 @@ nano .env  # або відкриваємо в редакторі
 Додайте ваш OpenAI API ключ:
 ```env
 OPENAI_API_KEY=your_openai_api_key_here
+```
+
+### 5. Встановлення pre-commit hooks (опціонально)
+
+```bash
+# Встановлення pre-commit
+pip install pre-commit
+
+# Встановлення hooks
+pre-commit install
+
+# Або використовуйте Makefile
+make pre-commit-install
 ```
 
 ## 🔧 Розробка
@@ -78,6 +94,12 @@ make test
 
 # Запуск тестів з покриттям
 make test-coverage
+
+# Перевірка безпеки
+make security-check
+
+# Запуск CI/CD локально
+make ci
 ```
 
 ### Pre-commit hooks
@@ -91,6 +113,20 @@ pre-commit install
 
 # Запуск на всіх файлах
 pre-commit run --all-files
+
+# Або використовуйте Makefile
+make pre-commit-install
+make pre-commit-run
+```
+
+### Docker для розробки
+
+```bash
+# Тестування з Docker Compose
+make docker-compose-test
+
+# Тестування Docker образу
+make docker-test
 ```
 
 ## 🚀 CI/CD
@@ -102,6 +138,10 @@ pre-commit run --all-files
 - ✅ **Security**: Bandit, Trivy, CodeQL
 - ✅ **Docker**: Збірка та тестування образів
 - ✅ **Deployment**: Автоматичний деплой на main branch
+- ✅ **Pre-commit hooks**: Автоматична перевірка перед комітами
+- ✅ **Dependabot**: Автоматичне оновлення залежностей
+- ✅ **Issue templates**: Структуровані шаблони для issues
+- ✅ **PR templates**: Шаблони для pull requests
 
 ### GitHub Actions Workflows
 
@@ -109,6 +149,7 @@ pre-commit run --all-files
 - `quick-check.yml` - Швидкі перевірки
 - `codeql.yml` - Security scanning
 - `release.yml` - Автоматичні releases
+- `badges.yml` - Генерація badges
 
 ### Badges
 
@@ -119,28 +160,132 @@ pre-commit run --all-files
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Imports: isort](https://img.shields.io/badge/%20imports-isort-%231674b1?style=flat&labelColor=ef8336)](https://pycqa.github.io/isort/)
+[![Ruff](https://img.shields.io/badge/ruff-A00034?style=flat&logo=ruff&logoColor=white)](https://github.com/astral-sh/ruff)
+[![Pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit&logoColor=white)](https://github.com/pre-commit/pre-commit)
+
+### Автоматизація
+
+- 🔄 **Автоматичні тести** при кожному push/PR
+- 🔒 **Security scanning** з CodeQL та Trivy
+- 📦 **Docker збірка** та тестування
+- 🚀 **Автоматичні releases** при тегах
+- 📈 **Coverage reports** з Codecov
+- 🔧 **Dependabot** для оновлення залежностей
 
 ## 📁 Структура проекту
 
 ```
 ai-swagger-bot/
-├── src/
+├── src/                       # Основний код
 │   ├── __init__.py
-│   ├── swagger_parser.py      # Парсер Swagger/OpenAPI
-│   ├── rag_engine.py          # RAG система
-│   ├── api_agent.py           # Основний агент (з LangChain)
-│   ├── simple_agent.py        # Спрощений агент (без LangChain)
-│   └── utils.py               # Допоміжні функції
-├── examples/
-│   ├── swagger_specs/         # Приклади Swagger файлів
-│   ├── basic_usage.py         # Базовий приклад
-│   └── test_queries.py        # Тестові запити
-├── tests/
-│   └── test_agent.py          # Тести
-├── app.py                     # Streamlit інтерфейс
-├── cli.py                     # CLI інтерфейс
-├── requirements.txt
-└── README.md
+│   ├── interactive_api_agent.py
+│   ├── enhanced_swagger_parser.py
+│   ├── rag_engine.py
+│   ├── enhanced_prompt_manager.py
+│   ├── dynamic_prompt_manager.py
+│   ├── swagger_error_handler.py
+│   ├── swagger_validation_prompt.py
+│   ├── config.py
+│   ├── prompt_descriptions.py
+│   └── prompt_templates.py
+├── tests/                     # Тести
+│   ├── test_*.py
+│   └── __pycache__/
+├── examples/                  # Приклади
+│   ├── swagger_specs/
+│   ├── basic_usage.py
+│   ├── enhanced_prompt_usage.py
+│   ├── object_creation_example.py
+│   └── api_response_processing_example.py
+├── docs/                      # Документація
+│   ├── README_AGENTS.md
+│   ├── QUERY_GUIDE.md
+│   ├── OBJECT_CREATION_GUIDE.md
+│   ├── ENHANCED_PROMPTS_GUIDE.md
+│   ├── API_RESPONSE_PROCESSING.md
+│   ├── RAG_SYSTEM_ANALYSIS.md
+│   ├── RAG_ANSWERS_SUMMARY.md
+│   ├── GPT_PROMPTS_SUMMARY.md
+│   ├── DYNAMIC_PROMPTS_README.md
+│   ├── DOCKER_GUIDE.md
+│   ├── DEMO_EXAMPLES.md
+│   ├── QUICK_REFERENCE.md
+│   ├── ALGORITHM_FLOWCHART.md
+│   ├── AI_SWAGGER_BOT_ALGORITHM.md
+│   ├── SECURITY_REPORT.md
+│   └── SECURITY_SETUP.md
+├── scripts/                   # Скрипти
+│   ├── analyze_chroma_db.py
+│   ├── clear_chroma_db.py
+│   ├── fresh_start.sh
+│   ├── quick_start.py
+│   ├── run_enhanced_chat.sh
+│   ├── reindex_swagger.py
+│   ├── view_vectors.py
+│   └── README_DB_MANAGEMENT.md
+├── .github/                   # GitHub конфігурація
+│   ├── workflows/             # CI/CD workflows
+│   │   ├── ci-cd.yml
+│   │   ├── quick-check.yml
+│   │   ├── codeql.yml
+│   │   ├── release.yml
+│   │   └── badges.yml
+│   ├── ISSUE_TEMPLATE/        # Шаблони issues
+│   │   ├── bug_report.md
+│   │   ├── feature_request.md
+│   │   ├── question.md
+│   │   ├── documentation.md
+│   │   ├── performance.md
+│   │   ├── accessibility.md
+│   │   ├── translation.md
+│   │   ├── regression.md
+│   │   ├── duplicate.md
+│   │   ├── invalid.md
+│   │   ├── wontfix.md
+│   │   ├── help_wanted.md
+│   │   ├── good_first_issue.md
+│   │   ├── enhancement.md
+│   │   ├── breaking_change.md
+│   │   ├── discussion.md
+│   │   ├── idea.md
+│   │   ├── feedback.md
+│   │   ├── thanks.md
+│   │   ├── spam.md
+│   │   ├── off_topic.md
+│   │   ├── not_reproducible.md
+│   │   ├── works_for_me.md
+│   │   ├── confirmed.md
+│   │   ├── blocked.md
+│   │   ├── priority_*.md
+│   │   └── config.yml
+│   ├── dependabot.yml         # Автооновлення залежностей
+│   ├── FUNDING.yml           # Фінансування
+│   └── pull_request_template.md
+├── enhanced_chat_app.py      # Streamlit додаток
+├── demo_client.html          # Демо клієнт
+├── docker-compose.yml        # Docker Compose
+├── docker-compose.test.yml   # Docker Compose для тестів
+├── Dockerfile               # Docker образ
+├── .dockerignore           # Docker ignore
+├── requirements.txt        # Залежності
+├── requirements-dev.txt    # Dev залежності
+├── setup.py              # Python пакет
+├── pyproject.toml        # Конфігурація проекту
+├── ruff.toml            # Ruff конфігурація
+├── .coveragerc          # Coverage конфігурація
+├── pytest.ini          # Pytest конфігурація
+├── mypy.ini           # MyPy конфігурація
+├── .bandit            # Bandit конфігурація
+├── .isort.cfg         # isort конфігурація
+├── .flake8           # flake8 конфігурація
+├── .pre-commit-config.yaml # Pre-commit hooks
+├── Makefile          # Команди для розробки
+├── LICENSE          # MIT License
+├── CONTRIBUTING.md  # Інструкції для контриб'юторів
+├── CODE_OF_CONDUCT.md # Code of Conduct
+├── SECURITY.md      # Security Policy
+├── CHANGELOG.md     # Історія змін
+└── README.md        # Головний README
 ```
 
 ## 🎯 Приклади використання
@@ -148,10 +293,10 @@ ai-swagger-bot/
 ### 1. Базовий використання (Python)
 
 ```python
-from src.api_agent import SwaggerAgent
+from src.interactive_api_agent import InteractiveAPIAgent
 
 # Ініціалізація агента
-agent = SwaggerAgent("examples/swagger_specs/shop_api.json")
+agent = InteractiveAPIAgent("examples/swagger_specs/shop_api.json")
 
 # Запит користувача
 user_query = "Додай товар: синя сукня, розмір 22, кількість 10"
@@ -160,6 +305,38 @@ user_query = "Додай товар: синя сукня, розмір 22, кі�
 response = agent.process_query(user_query)
 print(response)
 # Вивід: "📋 Сформований API запит: POST /products"
+```
+
+### 2. Використання з Docker
+
+```bash
+# Збірка Docker образу
+docker build -t ai-swagger-bot .
+
+# Запуск контейнера
+docker run -p 8501:8501 ai-swagger-bot
+
+# Або з Docker Compose
+docker-compose up
+```
+
+### 3. Використання з Makefile
+
+```bash
+# Встановлення залежностей
+make install-dev
+
+# Запуск тестів
+make test
+
+# Перевірка коду
+make lint
+
+# Форматування коду
+make format
+
+# Запуск CI/CD локально
+make ci
 ```
 
 ### 2. CLI інтерфейс
@@ -367,7 +544,28 @@ python cli.py --swagger examples/swagger_specs/shop_api.json --list-endpoints
 
 ## 📝 Ліцензія
 
-Цей проект розповсюджується під ліцензією MIT. Дивіться файл `LICENSE` для деталей.
+Цей проект ліцензований під MIT License - дивіться файл [LICENSE](LICENSE) для деталей.
+
+## 🤝 Контриб'юція
+
+Дивіться [CONTRIBUTING.md](CONTRIBUTING.md) для деталей про те, як контриб'ютити до проекту.
+
+## 📚 Документація
+
+- [API Reference](docs/API_REFERENCE.md)
+- [Query Guide](docs/QUERY_GUIDE.md)
+- [Object Creation Guide](docs/OBJECT_CREATION_GUIDE.md)
+- [Enhanced Prompts Guide](docs/ENHANCED_PROMPTS_GUIDE.md)
+- [Docker Guide](docs/DOCKER_GUIDE.md)
+- [Quick Reference](docs/QUICK_REFERENCE.md)
+
+## 🔒 Безпека
+
+Дивіться [SECURITY.md](SECURITY.md) для інформації про безпеку та звітування про вразливості.
+
+## 📋 Changelog
+
+Дивіться [CHANGELOG.md](CHANGELOG.md) для історії змін проекту.
 
 ## 🙏 Подяки
 

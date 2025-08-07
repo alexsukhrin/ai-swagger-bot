@@ -2,12 +2,14 @@
 Описи та метадані промптів для системи AI Swagger Bot.
 """
 
-from typing import Dict, Any, List
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, List
+
 
 class PromptCategory(Enum):
     """Категорії промптів."""
+
     SYSTEM = "system"
     INTENT_ANALYSIS = "intent_analysis"
     ERROR_HANDLING = "error_handling"
@@ -20,9 +22,11 @@ class PromptCategory(Enum):
     DEBUGGING = "debugging"
     USER_DEFINED = "user_defined"
 
+
 @dataclass
 class PromptDescription:
     """Опис промпту з метаданими."""
+
     name: str
     description: str
     category: PromptCategory
@@ -33,9 +37,10 @@ class PromptDescription:
     author: str = "system"
     is_deprecated: bool = False
 
+
 class PromptDescriptions:
     """Колекція описів промптів."""
-    
+
     @staticmethod
     def get_system_prompt_description() -> PromptDescription:
         """Опис системного промпту."""
@@ -46,15 +51,15 @@ class PromptDescriptions:
             tags=["core", "system", "api"],
             usage_examples=[
                 "Використовується при ініціалізації агента",
-                "Визначає базову поведінку агента"
+                "Визначає базову поведінку агента",
             ],
             success_criteria=[
                 "Агент розуміє свою роль",
                 "Відповідає українською мовою",
-                "Використовує емодзі для кращого UX"
-            ]
+                "Використовує емодзі для кращого UX",
+            ],
         )
-    
+
     @staticmethod
     def get_intent_analysis_description() -> PromptDescription:
         """Опис промпту для аналізу наміру."""
@@ -63,19 +68,15 @@ class PromptDescriptions:
             description="Аналізує запит користувача та визначає намір",
             category=PromptCategory.INTENT_ANALYSIS,
             tags=["analysis", "intent", "nlp"],
-            usage_examples=[
-                "Покажи всі товари",
-                "Створи новий товар",
-                "Онови товар з ID 123"
-            ],
+            usage_examples=["Покажи всі товари", "Створи новий товар", "Онови товар з ID 123"],
             success_criteria=[
                 "Визначає правильний HTTP метод",
                 "Ідентифікує ресурс",
                 "Витягує параметри та дані",
-                "Повертає структурований JSON"
-            ]
+                "Повертає структурований JSON",
+            ],
         )
-    
+
     @staticmethod
     def get_error_handling_description() -> PromptDescription:
         """Опис промпту для обробки помилок."""
@@ -84,19 +85,15 @@ class PromptDescriptions:
             description="Аналізує помилки сервера та генерує корисні відповіді",
             category=PromptCategory.ERROR_HANDLING,
             tags=["error", "debugging", "user_friendly"],
-            usage_examples=[
-                "Помилка валідації",
-                "Проблеми з авторизацією",
-                "Ресурс не знайдено"
-            ],
+            usage_examples=["Помилка валідації", "Проблеми з авторизацією", "Ресурс не знайдено"],
             success_criteria=[
                 "Класифікує тип помилки",
                 "Генерує зрозуміле пояснення",
                 "Запитує додаткову інформацію",
-                "Пропонує рішення"
-            ]
+                "Пропонує рішення",
+            ],
         )
-    
+
     @staticmethod
     def get_response_formatting_description() -> PromptDescription:
         """Опис промпту для форматування відповідей."""
@@ -108,16 +105,16 @@ class PromptDescriptions:
             usage_examples=[
                 "Успішний API виклик",
                 "Помилка при виконанні",
-                "Попередній перегляд запиту"
+                "Попередній перегляд запиту",
             ],
             success_criteria=[
                 "Використовує емодзі для кращого UX",
                 "Показує URL, метод, параметри",
                 "Структурована відповідь",
-                "Дружелюбний тон"
-            ]
+                "Дружелюбний тон",
+            ],
         )
-    
+
     @staticmethod
     def get_api_response_processing_description() -> PromptDescription:
         """Опис промпту для обробки відповідей API сервера."""
@@ -130,17 +127,17 @@ class PromptDescriptions:
                 "Покажи тільки назви товарів",
                 "Виведи список категорій",
                 "Покажи ID та назву",
-                "Фільтруй за певними полями"
+                "Фільтруй за певними полями",
             ],
             success_criteria=[
                 "Розуміє запит користувача",
                 "Витягує потрібні поля з JSON",
                 "Формує зрозумілий текст",
                 "Використовує емодзі та структурування",
-                "Адаптується до контексту запиту"
-            ]
+                "Адаптується до контексту запиту",
+            ],
         )
-    
+
     @staticmethod
     def get_object_creation_description() -> PromptDescription:
         """Опис промпту для створення об'єктів з автоматичним заповненням полів."""
@@ -153,7 +150,7 @@ class PromptDescriptions:
                 "Створи нову категорію Електроніка",
                 "Створи товар з назвою Телефон",
                 "Створи користувача Іван Петренко",
-                "Додай новий продукт"
+                "Додай новий продукт",
             ],
             success_criteria=[
                 "Автоматично заповнює обов'язкові поля",
@@ -161,10 +158,10 @@ class PromptDescriptions:
                 "Генерує реалістичні значення",
                 "Обробляє помилки валідації",
                 "Пропонує рішення без повторного введення",
-                "Зберігає контекст діалогу"
-            ]
+                "Зберігає контекст діалогу",
+            ],
         )
-    
+
     @staticmethod
     def get_all_descriptions() -> Dict[str, PromptDescription]:
         """Повертає всі описи промптів."""
@@ -174,41 +171,41 @@ class PromptDescriptions:
             "error_handling": PromptDescriptions.get_error_handling_description(),
             "response_formatting": PromptDescriptions.get_response_formatting_description(),
             "api_response_processing": PromptDescriptions.get_api_response_processing_description(),
-            "object_creation": PromptDescriptions.get_object_creation_description()
+            "object_creation": PromptDescriptions.get_object_creation_description(),
         }
-    
+
     @staticmethod
     def get_descriptions_by_category(category: PromptCategory) -> List[PromptDescription]:
         """Повертає описи промптів за категорією."""
         all_descriptions = PromptDescriptions.get_all_descriptions()
         return [desc for desc in all_descriptions.values() if desc.category == category]
-    
+
     @staticmethod
     def get_descriptions_by_tag(tag: str) -> List[PromptDescription]:
         """Повертає описи промптів за тегом."""
         all_descriptions = PromptDescriptions.get_all_descriptions()
         return [desc for desc in all_descriptions.values() if tag in desc.tags]
 
+
 class PromptRegistry:
     """Реєстр промптів з метаданими."""
-    
+
     def __init__(self):
         self.descriptions = PromptDescriptions.get_all_descriptions()
         self.custom_descriptions = {}
-    
+
     def register_custom_prompt(self, name: str, description: PromptDescription):
         """Реєструє кастомний промпт."""
         self.custom_descriptions[name] = description
-    
+
     def get_prompt_description(self, name: str) -> PromptDescription:
         """Отримує опис промпту за назвою."""
         return self.descriptions.get(name) or self.custom_descriptions.get(name)
-    
+
     def list_prompts_by_category(self, category: PromptCategory) -> List[str]:
         """Список промптів за категорією."""
-        return [name for name, desc in self.descriptions.items() 
-                if desc.category == category]
-    
+        return [name for name, desc in self.descriptions.items() if desc.category == category]
+
     def get_prompt_metadata(self, name: str) -> Dict[str, Any]:
         """Отримує метадані промпту."""
         desc = self.get_prompt_description(name)
@@ -222,6 +219,6 @@ class PromptRegistry:
                 "author": desc.author,
                 "is_deprecated": desc.is_deprecated,
                 "usage_examples": desc.usage_examples,
-                "success_criteria": desc.success_criteria
+                "success_criteria": desc.success_criteria,
             }
         return None

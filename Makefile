@@ -14,9 +14,10 @@ ifeq ($(OS),Windows_NT)
 	PIP_VENV = $(VENV)\Scripts\pip
 	ACTIVATE = $(VENV)\Scripts\activate
 else
-	PYTHON_VENV = $(VENV)/bin/python
-	PIP_VENV = $(VENV)/bin/pip
-	ACTIVATE = source $(VENV)/bin/activate
+	# Перевіряємо чи використовується conda
+	PYTHON_VENV = python
+	PIP_VENV = pip
+	ACTIVATE = conda activate ai-swagger
 endif
 
 help: ## Показати довідку
@@ -30,7 +31,6 @@ install: ## Встановити проект
 
 install-dev: ## Встановити проект з dev залежностями
 	@echo "🔧 Встановлення з dev залежностями..."
-	$(PYTHON) -m venv $(VENV)
 	$(PIP_VENV) install -r requirements.txt
 	$(PIP_VENV) install -r requirements-dev.txt
 	cp env_example.txt .env
@@ -38,14 +38,11 @@ install-dev: ## Встановити проект з dev залежностям�
 
 test: ## Запустити тести
 	@echo "🧪 Запуск тестів..."
-	$(PYTHON_VENV) -m unittest discover tests -v
+	PYTHONPATH=src:$(PYTHONPATH) $(PYTHON_VENV) -m pytest tests/ -v
 
 test-coverage: ## Запустити тести з покриттям
 	@echo "📊 Запуск тестів з покриттям..."
-	$(PIP_VENV) install coverage
-	$(PYTHON_VENV) -m coverage run -m unittest discover tests
-	$(PYTHON_VENV) -m coverage report
-	$(PYTHON_VENV) -m coverage html
+	PYTHONPATH=src:$(PYTHONPATH) $(PYTHON_VENV) -m pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing
 
 run: ## Запустити Streamlit додаток
 	@echo "🌐 Запуск Streamlit додатку..."
@@ -61,15 +58,11 @@ run-examples: ## Запустити приклади
 
 lint: ## Перевірити код
 	@echo "🔍 Перевірка коду..."
-	$(PIP_VENV) install ruff black isort
-	$(PYTHON_VENV) -m ruff check src/ tests/ examples/
 	$(PYTHON_VENV) -m black --check src/ tests/ examples/
 	$(PYTHON_VENV) -m isort --check-only src/ tests/ examples/
 
 format: ## Форматувати код
 	@echo "🎨 Форматування коду..."
-	$(PIP_VENV) install ruff black isort
-	$(PYTHON_VENV) -m ruff check --fix src/ tests/ examples/
 	$(PYTHON_VENV) -m black src/ tests/ examples/
 	$(PYTHON_VENV) -m isort src/ tests/ examples/
 
@@ -110,7 +103,6 @@ ci: ## Запустити CI/CD локально
 
 security-check: ## Перевірити безпеку
 	@echo "🔒 Перевірка безпеки..."
-	$(PIP_VENV) install bandit
 	$(PYTHON_VENV) -m bandit -r src/ -f json -o bandit-report.json || true
 
 docker-test: ## Тестувати Docker образ
@@ -133,8 +125,7 @@ pre-commit-install: ## Встановити pre-commit hooks
 pre-commit-run: ## Запустити pre-commit на всіх файлах
 	@echo "🔧 Запуск pre-commit..."
 	$(PYTHON_VENV) -m pre_commit run --all-files
-	$(MAKE) test
-	@echo "✅ Перевірка завершена!"
+	@echo "✅ Pre-commit перевірка завершена!"
 
 dev-setup: ## Налаштування для розробки
 	@echo "⚙️ Налаштування для розробки..."

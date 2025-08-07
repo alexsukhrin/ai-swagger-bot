@@ -3,11 +3,12 @@
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
 
 class PromptTemplates:
     """Клас з готовими промпт-шаблонами для різних сценаріїв."""
-    
+
     @staticmethod
     def get_system_prompt() -> str:
         """Загальний системний промпт для агента."""
@@ -31,7 +32,7 @@ class PromptTemplates:
 Завжди відповідай українською мовою та будь корисним та дружелюбним.
 Використовуй емодзі для кращого сприйняття та структуруй відповіді зрозуміло.
 """
-    
+
     @staticmethod
     def get_intent_analysis_prompt(user_query: str, context: str = "") -> str:
         """Промпт для аналізу наміру користувача."""
@@ -56,9 +57,11 @@ class PromptTemplates:
     "intent": "опис мети запиту"
 }}
 """
-    
+
     @staticmethod
-    def get_error_analysis_prompt(error_message: str, original_query: str, api_request: Dict[str, Any]) -> str:
+    def get_error_analysis_prompt(
+        error_message: str, original_query: str, api_request: Dict[str, Any]
+    ) -> str:
         """Промпт для аналізу помилок сервера."""
         return f"""
 Проаналізуй помилку сервера та згенеруй корисний запит на додаткову інформацію.
@@ -77,9 +80,13 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 
 Відповідь має бути дружелюбною та конкретною, з емодзі для кращого сприйняття.
 """
-    
+
     @staticmethod
-    def get_response_formatting_prompt(api_request: Dict[str, Any], server_response: Optional[Dict[str, Any]] = None, status: str = "success") -> str:
+    def get_response_formatting_prompt(
+        api_request: Dict[str, Any],
+        server_response: Optional[Dict[str, Any]] = None,
+        status: str = "success",
+    ) -> str:
         """Промпт для форматування відповіді користувачу."""
         return f"""
 Відформатуй відповідь користувачу про API запит.
@@ -98,14 +105,16 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 
 Відповідай українською мовою.
 """
-    
+
     @staticmethod
-    def get_api_response_processing_prompt(user_query: str, api_response: Dict[str, Any], available_fields: List[str] = None) -> str:
+    def get_api_response_processing_prompt(
+        user_query: str, api_response: Dict[str, Any], available_fields: List[str] = None
+    ) -> str:
         """Промпт для обробки відповіді API сервера в дружелюбний текст."""
-        
+
         # Аналізуємо запит користувача для визначення потрібних полів
         query_lower = user_query.lower()
-        
+
         # Визначаємо що хоче користувач
         wants_names = any(word in query_lower for word in ["назв", "ім'я", "title", "name"])
         wants_ids = any(word in query_lower for word in ["id", "айді", "номер"])
@@ -113,7 +122,7 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
         wants_prices = any(word in query_lower for word in ["цін", "price", "вартість"])
         wants_only = any(word in query_lower for word in ["тільки", "лише", "only"])
         wants_list = any(word in query_lower for word in ["список", "list", "всі", "all"])
-        
+
         # Визначаємо тип обробки
         if wants_only and (wants_names or wants_ids or wants_categories):
             processing_type = "filtered"
@@ -121,7 +130,7 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
             processing_type = "list"
         else:
             processing_type = "full"
-        
+
         return f"""
 Ти - експерт з обробки даних. Твоя задача - перетворити JSON відповідь від API сервера в дружелюбний текст для користувача.
 
@@ -181,34 +190,37 @@ JSON ВІДПОВІДЬ API:
 ВІДПОВІДЬ:
 Створи дружелюбну відповідь українською мовою, яка відповідає запиту користувача та показує тільки потрібну інформацію.
 """
-    
+
     @staticmethod
-    def get_object_creation_prompt(user_query: str, endpoint_info: Dict[str, Any], 
-                                 conversation_history: List[Dict[str, Any]] = None) -> str:
+    def get_object_creation_prompt(
+        user_query: str,
+        endpoint_info: Dict[str, Any],
+        conversation_history: List[Dict[str, Any]] = None,
+    ) -> str:
         """Промпт для створення об'єктів з автоматичним заповненням полів."""
-        
+
         # Аналізуємо запит користувача
         query_lower = user_query.lower()
-        
+
         # Визначаємо тип створення
         is_creating_category = any(word in query_lower for word in ["категорі", "category"])
         is_creating_product = any(word in query_lower for word in ["товар", "product", "продукт"])
         is_creating_user = any(word in query_lower for word in ["користувач", "user"])
-        
+
         # Витягуємо назву з запиту
         import re
+
         name_match = re.search(r'["""]([^"""]+)["""]', user_query)
         extracted_name = name_match.group(1) if name_match else None
-        
+
         # Аналізуємо історію розмови для контексту
         context_info = ""
         if conversation_history:
             recent_messages = conversation_history[-3:]  # Останні 3 повідомлення
-            context_info = "\n".join([
-                f"Попередній запит: {msg.get('user_message', '')}"
-                for msg in recent_messages
-            ])
-        
+            context_info = "\n".join(
+                [f"Попередній запит: {msg.get('user_message', '')}" for msg in recent_messages]
+            )
+
         return f"""
 Ти - експерт з створення об'єктів через API. Твоя задача - допомогти користувачу створити об'єкт з автоматичним заповненням полів.
 
@@ -312,9 +324,11 @@ ENDPOINT ІНФОРМАЦІЯ:
 ВІДПОВІДЬ:
 Створи дружелюбну відповідь українською мовою. Якщо все добре - покажи успішне створення. Якщо є помилка - поясни її та запропонуй рішення без необхідності повторного введення всіх даних.
 """
-    
+
     @staticmethod
-    def get_followup_generation_prompt(api_request: Dict[str, Any], intent: Dict[str, Any], error_message: str) -> str:
+    def get_followup_generation_prompt(
+        api_request: Dict[str, Any], intent: Dict[str, Any], error_message: str
+    ) -> str:
         """Промпт для генерації запиту на додаткову інформацію."""
         return f"""
 Проаналізуй помилку та згенеруй запит на додаткову інформацію.
@@ -338,7 +352,7 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 💡 Будь ласка, надайте недостатню інформацію. Наприклад:
 • [конкретні приклади]
 """
-    
+
     @staticmethod
     def get_help_prompt(user_query: str, available_resources: List[str]) -> str:
         """Промпт для допомоги користувачу."""
@@ -356,9 +370,11 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 
 Надай конкретні приклади запитів українською мовою з емодзі для кращого сприйняття.
 """
-    
+
     @staticmethod
-    def get_endpoint_search_prompt(user_query: str, intent: Dict[str, Any], endpoints: List[Dict[str, Any]]) -> str:
+    def get_endpoint_search_prompt(
+        user_query: str, intent: Dict[str, Any], endpoints: List[Dict[str, Any]]
+    ) -> str:
         """Промпт для пошуку endpoints."""
         return f"""
 Знайди відповідні API endpoints для запиту користувача.
@@ -371,9 +387,11 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 
 Поверни список найбільш відповідних endpoints з їх метаданими.
 """
-    
+
     @staticmethod
-    def get_request_formation_prompt(user_query: str, intent: Dict[str, Any], endpoint_info: Dict[str, Any]) -> str:
+    def get_request_formation_prompt(
+        user_query: str, intent: Dict[str, Any], endpoint_info: Dict[str, Any]
+    ) -> str:
         """Промпт для формування API запиту."""
         return f"""
 Сформуй правильний API запит на основі наміру користувача.
@@ -391,7 +409,7 @@ Endpoint інформація: {json.dumps(endpoint_info, ensure_ascii=False, in
 
 Поверни готовий API запит у форматі JSON.
 """
-    
+
     @staticmethod
     def get_optimization_prompt(current_request: Dict[str, Any], goal: str) -> str:
         """Промпт для оптимізації запитів."""
@@ -409,9 +427,11 @@ Endpoint інформація: {json.dumps(endpoint_info, ensure_ascii=False, in
 
 Поверни оптимізований запит з поясненням змін.
 """
-    
+
     @staticmethod
-    def get_debugging_prompt(issue_description: str, api_request: Dict[str, Any], error: str) -> str:
+    def get_debugging_prompt(
+        issue_description: str, api_request: Dict[str, Any], error: str
+    ) -> str:
         """Промпт для налагодження проблем."""
         return f"""
 Допоможи налагодити проблему з API запитом.
@@ -428,7 +448,7 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 
 Надай конкретні рекомендації для виправлення українською мовою.
 """
-    
+
     @staticmethod
     def get_ux_improvement_prompt(original_response: str, context: str) -> str:
         """Промпт для покращення UX."""
@@ -448,10 +468,11 @@ API запит: {json.dumps(api_request, ensure_ascii=False, indent=2)}
 Поверни покращену версію українською мовою.
 """
 
+
 # Константи для емодзі
 class EmojiConstants:
     """Константи для емодзі в відповідях."""
-    
+
     SUCCESS = "✅"
     ERROR = "❌"
     WARNING = "⚠️"
@@ -473,28 +494,29 @@ class EmojiConstants:
     SPEED = "🚀"
     MAGIC = "✨"
 
+
 # Приклади використання
 if __name__ == "__main__":
     # Приклад використання промптів
     user_query = "Створи нову категорію з назвою 'Електроніка'"
-    
+
     # Аналіз наміру
     intent_prompt = PromptTemplates.get_intent_analysis_prompt(user_query)
     print("📝 Промпт для аналізу наміру:")
     print(intent_prompt)
     print()
-    
+
     # Приклад помилки
     error_message = "Validation error: description is required"
     api_request = {
         "url": "http://localhost:3030/api/categories",
         "method": "POST",
-        "data": {"name": "Електроніка"}
+        "data": {"name": "Електроніка"},
     }
-    
+
     error_prompt = PromptTemplates.get_error_analysis_prompt(error_message, user_query, api_request)
     print("⚠️ Промпт для аналізу помилки:")
     print(error_prompt)
     print()
-    
+
     print("🎯 Промпт-шаблони готові для використання в InteractiveSwaggerAgent!")

@@ -3,21 +3,25 @@
 Setup script for AI Swagger Bot
 """
 
-from setuptools import setup, find_packages
 import os
+
+from setuptools import find_packages, setup
+
 
 # Read the README file
 def read_readme():
     with open("README.md", "r", encoding="utf-8") as fh:
         return fh.read()
 
+
 # Read requirements
 def read_requirements(filename):
     with open(filename, "r", encoding="utf-8") as fh:
         return [line.strip() for line in fh if line.strip() and not line.startswith("#")]
 
+
 setup(
-    name="ai-swagger-bot",
+    name="ai_swagger_bot",
     version="0.1.0",
     author="AI Swagger Bot Team",
     author_email="team@ai-swagger-bot.com",

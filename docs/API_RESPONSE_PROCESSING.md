@@ -121,16 +121,16 @@ GPT створює дружелюбний текст з емодзі та стр
 ```python
 def get_api_response_processing_prompt(user_query: str, api_response: Dict[str, Any], available_fields: List[str] = None) -> str:
     """Промпт для обробки відповіді API сервера в дружелюбний текст."""
-    
+
     # Аналіз запиту користувача
     query_lower = user_query.lower()
-    
+
     # Визначення потрібних полів
     wants_names = any(word in query_lower for word in ["назв", "ім'я", "title", "name"])
     wants_ids = any(word in query_lower for word in ["id", "айді", "номер"])
     wants_categories = any(word in query_lower for word in ["категорі", "category"])
     wants_prices = any(word in query_lower for word in ["цін", "price", "вартість"])
-    
+
     # Генерація промпту...
 ```
 
@@ -139,23 +139,23 @@ def get_api_response_processing_prompt(user_query: str, api_response: Dict[str, 
 ```python
 def _process_api_response_with_gpt(self, api_request: Dict[str, Any], api_response: Dict[str, Any]) -> str:
     """Обробляє відповідь API сервера через GPT."""
-    
+
     # Отримання контексту
     user_query = self._get_last_user_query()
-    
+
     # Генерація промпту
     processing_prompt = PromptTemplates.get_api_response_processing_prompt(
         user_query=user_query,
         api_response=api_response,
         available_fields=self._extract_available_fields(api_response)
     )
-    
+
     # Виклик GPT
     messages = [
         SystemMessage(content="Ти експерт з обробки даних та форматування відповідей."),
         HumanMessage(content=processing_prompt)
     ]
-    
+
     llm_response = self.llm.invoke(messages)
     return llm_response.content
 ```
@@ -226,7 +226,7 @@ def get_api_response_processing_prompt(user_query: str, api_response: Dict[str, 
     # Додати нові ключові слова
     wants_status = any(word in query_lower for word in ["статус", "status"])
     wants_dates = any(word in query_lower for word in ["дата", "date", "час"])
-    
+
     # Додати нові правила обробки
     if wants_status:
         processing_type = "status_filter"
@@ -281,7 +281,7 @@ CUSTOM_FORMATS = {
 
 ---
 
-**Автор:** AI Assistant  
-**Дата:** 2024  
-**Версія:** 1.0  
+**Автор:** AI Assistant
+**Дата:** 2024
+**Версія:** 1.0
 **Статус:** ✅ Готово до використання
