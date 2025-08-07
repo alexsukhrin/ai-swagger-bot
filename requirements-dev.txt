@@ -17,7 +17,7 @@ mkdocs-material==9.5.3
 # Removed mypy - using only black, isort, and bandit
 
 # Documentation
-pdoc3==0.10.4
+pdoc3==0.11.6
 
 # Development tools
 pre-commit==3.6.0
