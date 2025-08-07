@@ -197,6 +197,7 @@ class RAGEngine:
             Список всіх endpoints з метаданими
         """
         if not self.vectorstore:
+            logger.warning("Vectorstore не ініціалізовано")
             return []
 
         try:
@@ -207,13 +208,22 @@ class RAGEngine:
             documents = docs.get("documents", [])
             metadatas = docs.get("metadatas", [])
 
+            logger.info(f"Знайдено {len(documents)} документів в базі")
+
             for i, content in enumerate(documents):
                 metadata = metadatas[i] if i < len(metadatas) else {}
                 results.append({"content": content, "metadata": metadata})
 
+                # Логуємо перші кілька endpoints для діагностики
+                if i < 3:
+                    method = metadata.get("method", "UNKNOWN")
+                    path = metadata.get("path", "UNKNOWN")
+                    logger.info(f"Endpoint {i+1}: {method} {path}")
+
+            logger.info(f"Повертаю {len(results)} endpoints")
             return results
         except Exception as e:
-            print(f"Помилка отримання endpoints: {e}")
+            logger.error(f"Помилка отримання endpoints: {e}")
             return []
 
     def clear_database(self) -> None:

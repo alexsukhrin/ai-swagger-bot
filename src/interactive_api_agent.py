@@ -1107,26 +1107,37 @@ class InteractiveSwaggerAgent:
         try:
             # Шукаємо POST endpoints для створення
             all_endpoints = self.rag_engine.get_all_endpoints()
+            logging.info(f"Знайдено {len(all_endpoints)} endpoints для пошуку {object_type}")
 
             for endpoint in all_endpoints:
-                method = endpoint.get("method", "").upper()
-                path = endpoint.get("path", "").lower()
+                metadata = endpoint.get("metadata", {})
+                method = metadata.get("method", "").upper()
+                path = metadata.get("path", "").lower()
+
+                logging.info(f"Перевіряю endpoint: {method} {path} для {object_type}")
 
                 # Перевіряємо чи це POST endpoint для створення
                 if method == "POST":
                     if object_type == "category" and "category" in path:
+                        logging.info(f"Знайдено endpoint для category: {method} {path}")
                         return endpoint
                     elif object_type == "product" and ("product" in path or "item" in path):
+                        logging.info(f"Знайдено endpoint для product: {method} {path}")
                         return endpoint
                     elif object_type == "user" and "user" in path:
+                        logging.info(f"Знайдено endpoint для user: {method} {path}")
                         return endpoint
 
             # Якщо не знайдено специфічний endpoint, шукаємо загальний
             for endpoint in all_endpoints:
-                method = endpoint.get("method", "").upper()
+                metadata = endpoint.get("metadata", {})
+                method = metadata.get("method", "").upper()
                 if method == "POST":
+                    path = metadata.get("path", "").lower()
+                    logging.info(f"Використовую загальний POST endpoint: {method} {path}")
                     return endpoint
 
+            logging.warning(f"Не знайдено POST endpoint для створення {object_type}")
             return None
 
         except Exception as e:

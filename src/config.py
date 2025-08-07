@@ -16,7 +16,7 @@ class Config:
 
     # API налаштування
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-full")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0"))
 
     # JWT налаштування

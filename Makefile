@@ -48,6 +48,14 @@ run: ## Запустити Streamlit додаток
 	@echo "🌐 Запуск Streamlit додатку..."
 	$(PYTHON_VENV) -m streamlit run app.py
 
+run-api: ## Запустити FastAPI сервіс
+	@echo "🚀 Запуск FastAPI сервісу..."
+	$(PYTHON_VENV) -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+
+create-admin: ## Створити адміністратора
+	@echo "👤 Створення адміністратора..."
+	$(PYTHON_VENV) scripts/create_admin.py
+
 run-cli: ## Запустити CLI інтерфейс
 	@echo "💻 Запуск CLI інтерфейсу..."
 	$(PYTHON_VENV) cli.py --swagger examples/swagger_specs/shop_api.json
