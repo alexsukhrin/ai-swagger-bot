@@ -35,13 +35,13 @@ agent = SwaggerAgent(
 def _analyze_user_intent(self, user_query: str):
     prompt = f"""
     Проаналізуй запит користувача та визначи намір та параметри.
-    
+
     Запит: {user_query}
-    
+
     Поверни JSON з наступною структурою:
     {{
         "intent": "create",
-        "operation": "POST", 
+        "operation": "POST",
         "resource": "product",
         "parameters": {{
             "name": "синя сукня",
@@ -50,7 +50,7 @@ def _analyze_user_intent(self, user_query: str):
         }}
     }}
     """
-    
+
     response = self.llm.invoke([HumanMessage(content=prompt)])
     return json.loads(response.content)
 ```
@@ -60,7 +60,7 @@ def _analyze_user_intent(self, user_query: str):
 {
     "intent": "create",
     "operation": "POST",
-    "resource": "product", 
+    "resource": "product",
     "parameters": {
         "name": "синя сукня",
         "size": "22",
@@ -74,7 +74,7 @@ def _analyze_user_intent(self, user_query: str):
 def search_similar_endpoints(self, query: str, k: int = 3):
     # Пошук в векторній базі
     docs = self.vectorstore.similarity_search(query, k=k)
-    
+
     results = []
     for doc in docs:
         result = {
@@ -82,7 +82,7 @@ def search_similar_endpoints(self, query: str, k: int = 3):
             'metadata': doc.metadata
         }
         results.append(result)
-    
+
     return results
 ```
 
@@ -105,12 +105,12 @@ def search_similar_endpoints(self, query: str, k: int = 3):
 def _form_api_request(self, user_query: str, intent: Dict, endpoints: List[Dict]):
     prompt = f"""
     Сформуй API запит на основі запиту користувача та доступних endpoints.
-    
+
     Запит користувача: {user_query}
     Намір: {json.dumps(intent)}
     Базовий URL: {self.base_url}
     Доступні endpoints: {endpoints_info}
-    
+
     Поверни JSON:
     {{
         "method": "POST",
@@ -118,12 +118,12 @@ def _form_api_request(self, user_query: str, intent: Dict, endpoints: List[Dict]
         "headers": {{"Content-Type": "application/json"}},
         "data": {{
             "name": "синя сукня",
-            "size": "22", 
+            "size": "22",
             "quantity": 10
         }}
     }}
     """
-    
+
     response = self.llm.invoke([HumanMessage(content=prompt)])
     return json.loads(response.content)
 ```
@@ -150,7 +150,7 @@ def _call_api(self, api_request: Dict[str, Any]):
     # Додавання JWT токена для авторизації
     if api_request['method'] == 'POST' and 'ngrok-free.app' in api_request['url']:
         headers['Authorization'] = f'Bearer {jwt_token}'
-    
+
     # Виконання запиту
     response = requests.request(
         method=api_request['method'],
@@ -159,7 +159,7 @@ def _call_api(self, api_request: Dict[str, Any]):
         json=api_request.get('data'),
         timeout=30
     )
-    
+
     return {
         'status_code': response.status_code,
         'headers': dict(response.headers),
@@ -173,15 +173,15 @@ def _format_response(self, api_request: Dict, response: Optional[Dict] = None):
     result = "📋 Сформований API запит:\n"
     result += f"🔗 URL: {api_request['url']}\n"
     result += f"📤 Метод: {api_request['method']}\n"
-    
+
     if api_request.get('data'):
         result += f"📦 Дані: {json.dumps(api_request['data'], indent=2)}\n"
-    
+
     if response:
         result += f"\n✅ Статус: {response['status_code']}"
         if response.get('data'):
             result += f"\n📥 Відповідь: {json.dumps(response['data'], indent=2)}"
-    
+
     return result
 ```
 

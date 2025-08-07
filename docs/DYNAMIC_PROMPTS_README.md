@@ -178,7 +178,7 @@ agent = EnhancedInteractiveSwaggerAgent("prompts.db")
 ```python
 def handle_user_message(message: str):
     result = agent.process_user_query(message)
-    
+
     if result['success']:
         return f"✅ {result['message']}"
     else:
@@ -293,7 +293,7 @@ agent.process_user_query(add_command)
 
 ---
 
-**Автор:** AI Assistant  
-**Дата:** 2024  
-**Версія:** 1.0  
+**Автор:** AI Assistant
+**Дата:** 2024
+**Версія:** 1.0
 **Статус:** ✅ Готово до використання

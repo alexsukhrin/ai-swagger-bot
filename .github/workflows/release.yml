@@ -12,30 +12,30 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: ${{ env.PYTHON_VERSION }}
-        
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
-        
+
     - name: Run tests
       run: |
         pytest tests/ -v --cov=src --cov-report=xml
-        
+
     - name: Build package
       run: |
         python setup.py sdist bdist_wheel
-        
+
     - name: Create Release
       uses: actions/create-release@v1
       env:
@@ -45,7 +45,7 @@ jobs:
         release_name: Release ${{ github.ref }}
         draft: false
         prerelease: false
-        
+
     - name: Upload Release Assets
       uses: actions/upload-release-asset@v1
       env:
@@ -55,7 +55,7 @@ jobs:
         asset_path: ./dist/*.whl
         asset_name: ai-swagger-bot-${{ github.ref_name }}.whl
         asset_content_type: application/zip
-        
+
     - name: Upload Source Distribution
       uses: actions/upload-release-asset@v1
       env:

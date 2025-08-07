@@ -170,51 +170,51 @@ Field 'price' is required
 ### Промпт для створення
 
 ```python
-def get_object_creation_prompt(user_query: str, endpoint_info: Dict[str, Any], 
+def get_object_creation_prompt(user_query: str, endpoint_info: Dict[str, Any],
                              conversation_history: List[Dict[str, Any]] = None) -> str:
     """Промпт для створення об'єктів з автоматичним заповненням полів."""
-    
+
     # Аналіз запиту користувача
     query_lower = user_query.lower()
-    
+
     # Визначення типу створення
     is_creating_category = any(word in query_lower for word in ["категорі", "category"])
     is_creating_product = any(word in query_lower for word in ["товар", "product", "продукт"])
     is_creating_user = any(word in query_lower for word in ["користувача", "user"])
-    
+
     # Витягування назви з запиту
     name_match = re.search(r'["""]([^"""]+)["""]', user_query)
     extracted_name = name_match.group(1) if name_match else None
-    
+
     # Генерація промпту...
 ```
 
 ### Інтеграція в агент
 
 ```python
-def _create_object_with_auto_fill(self, user_query: str, endpoint_info: Dict[str, Any], 
+def _create_object_with_auto_fill(self, user_query: str, endpoint_info: Dict[str, Any],
                                  user_identifier: str = "default_user") -> str:
     """Створює об'єкт з автоматичним заповненням полів та обробкою помилок."""
-    
+
     # Отримання історії розмови
     conversation_history = self.conversation_history.load_conversation(user_identifier)
-    
+
     # Генерація промпту для створення об'єкта
     creation_prompt = PromptTemplates.get_object_creation_prompt(
         user_query=user_query,
         endpoint_info=endpoint_info,
         conversation_history=conversation_history
     )
-    
+
     # Виклик GPT для створення об'єкта
     messages = [
         SystemMessage(content="Ти експерт з створення об'єктів через API та автоматичного заповнення полів."),
         HumanMessage(content=creation_prompt)
     ]
-    
+
     llm_response = self.llm.invoke(messages)
     creation_response = llm_response.content
-    
+
     # Парсинг відповіді GPT та виконання API запиту...
 ```
 
@@ -268,12 +268,12 @@ def _create_object_with_auto_fill(self, user_query: str, endpoint_info: Dict[str
 
 ```python
 # В prompt_templates.py
-def get_object_creation_prompt(user_query: str, endpoint_info: Dict[str, Any], 
+def get_object_creation_prompt(user_query: str, endpoint_info: Dict[str, Any],
                              conversation_history: List[Dict[str, Any]] = None) -> str:
     # Додати нові типи
     is_creating_order = any(word in query_lower for word in ["замовлення", "order"])
     is_creating_review = any(word in query_lower for word in ["відгук", "review"])
-    
+
     # Додати правила для нових типів
     if is_creating_order:
         # Правила для замовлень
@@ -336,7 +336,7 @@ CUSTOM_FILL_RULES = {
 
 ---
 
-**Автор:** AI Assistant  
-**Дата:** 2024  
-**Версія:** 1.0  
+**Автор:** AI Assistant
+**Дата:** 2024
+**Версія:** 1.0
 **Статус:** ✅ Готово до використання

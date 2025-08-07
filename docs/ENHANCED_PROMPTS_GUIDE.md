@@ -354,7 +354,7 @@ for query in queries:
     suggestions = manager.get_prompt_suggestions(query)
     print(f"\n📝 Запит: {query}")
     print(f"🎯 Знайдено {len(suggestions)} пропозицій:")
-    
+
     for i, suggestion in enumerate(suggestions[:3], 1):
         print(f"  {i}. {suggestion['name']}")
         print(f"     Релевантність: {suggestion['relevance_score']:.2f}")
@@ -444,7 +444,7 @@ print("✅ Конфігурація експортована та імпорто
 
 ---
 
-**Автор:** AI Assistant  
-**Дата:** 2024  
-**Версія:** 2.0  
+**Автор:** AI Assistant
+**Дата:** 2024
+**Версія:** 2.0
 **Статус:** ✅ Готово до використання

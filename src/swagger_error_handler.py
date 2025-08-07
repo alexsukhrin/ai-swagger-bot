@@ -3,14 +3,16 @@
 """
 
 import json
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
+
 
 class SwaggerErrorHandler:
     """Клас для обробки помилок коли Swagger специфікація не відповідає реальному API."""
-    
+
     @staticmethod
-    def get_swagger_mismatch_detection_prompt(user_query: str, swagger_endpoints: List[Dict[str, Any]], 
-                                            api_error: Dict[str, Any] = None) -> str:
+    def get_swagger_mismatch_detection_prompt(
+        user_query: str, swagger_endpoints: List[Dict[str, Any]], api_error: Dict[str, Any] = None
+    ) -> str:
         """Промпт для виявлення невідповідності між Swagger специфікацією та реальним API."""
         return f"""
 Ти - експерт з API. Вияви та оброби невідповідність між Swagger специфікацією та реальним API.
@@ -64,8 +66,9 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 """
 
     @staticmethod
-    def get_endpoint_correction_prompt(user_query: str, incorrect_endpoint: Dict[str, Any], 
-                                     api_error: Dict[str, Any]) -> str:
+    def get_endpoint_correction_prompt(
+        user_query: str, incorrect_endpoint: Dict[str, Any], api_error: Dict[str, Any]
+    ) -> str:
         """Промпт для виправлення неправильного endpoint на основі помилки API."""
         return f"""
 Ти - експерт з API. Виправ неправильний endpoint на основі помилки сервера.
@@ -105,8 +108,9 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 """
 
     @staticmethod
-    def get_swagger_retry_prompt(user_query: str, original_endpoint: Dict[str, Any], 
-                                corrected_endpoint: Dict[str, Any]) -> str:
+    def get_swagger_retry_prompt(
+        user_query: str, original_endpoint: Dict[str, Any], corrected_endpoint: Dict[str, Any]
+    ) -> str:
         """Промпт для повторної спроби з виправленим endpoint."""
         return f"""
 Ти - експерт з API. Виконай повторну спробу з виправленим endpoint.
@@ -141,7 +145,9 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 """
 
     @staticmethod
-    def get_endpoint_discovery_prompt(user_query: str, available_endpoints: List[Dict[str, Any]]) -> str:
+    def get_endpoint_discovery_prompt(
+        user_query: str, available_endpoints: List[Dict[str, Any]]
+    ) -> str:
         """Промпт для пошуку правильного endpoint коли Swagger специфікація неправильна."""
         return f"""
 Ти - експерт з API. Знайди правильний endpoint коли Swagger специфікація не відповідає реальному API.
@@ -185,10 +191,11 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 """
 
     @staticmethod
-    def get_user_friendly_error_message(error_type: str, user_query: str, 
-                                      swagger_issue: str, suggestion: str) -> str:
+    def get_user_friendly_error_message(
+        error_type: str, user_query: str, swagger_issue: str, suggestion: str
+    ) -> str:
         """Генерує дружелюбне повідомлення про помилку для користувача."""
-        
+
         error_messages = {
             "swagger_mismatch": f"""
 ⚠️ **Проблема з Swagger специфікацією**
@@ -201,7 +208,6 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 
 🔄 **Що робимо:** Виправляємо endpoint та повторюємо запит автоматично.
 """,
-            
             "invalid_parameter": f"""
 ⚠️ **Неправильний параметр**
 
@@ -213,7 +219,6 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 
 🔄 **Що робимо:** Використовуємо правильний endpoint без параметрів.
 """,
-            
             "missing_endpoint": f"""
 ⚠️ **Відсутній endpoint**
 
@@ -225,7 +230,6 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 
 🔄 **Що робимо:** Шукаємо альтернативний endpoint.
 """,
-            
             "wrong_method": f"""
 ⚠️ **Неправильний HTTP метод**
 
@@ -236,10 +240,12 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 💡 **Рішення:** {suggestion}
 
 🔄 **Що робимо:** Використовуємо правильний HTTP метод.
-"""
+""",
         }
-        
-        return error_messages.get(error_type, f"""
+
+        return error_messages.get(
+            error_type,
+            f"""
 ⚠️ **Помилка API**
 
 🔍 **Ваш запит:** {user_query}
@@ -249,7 +255,8 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
 💡 **Рішення:** {suggestion}
 
 🔄 **Що робимо:** Виправляємо проблему та повторюємо запит.
-""")
+""",
+        )
 
     @staticmethod
     def get_common_endpoint_patterns() -> Dict[str, Dict[str, str]]:
@@ -259,72 +266,73 @@ ENDPOINTS З SWAGGER СПЕЦИФІКАЦІЇ:
                 "pattern": "GET /api/{resource}",
                 "example": "GET /api/categories",
                 "description": "Отримання всіх записів",
-                "swagger_issue": "Endpoint має параметр {id} замість бути без параметрів"
+                "swagger_issue": "Endpoint має параметр {id} замість бути без параметрів",
             },
             "get_by_id": {
                 "pattern": "GET /api/{resource}/{id}",
                 "example": "GET /api/categories/123",
                 "description": "Отримання запису за ID",
-                "swagger_issue": "Endpoint очікує реальний ID, не placeholder"
+                "swagger_issue": "Endpoint очікує реальний ID, не placeholder",
             },
             "create": {
                 "pattern": "POST /api/{resource}",
                 "example": "POST /api/categories",
                 "description": "Створення нового запису",
-                "swagger_issue": "Неправильний HTTP метод або URL"
+                "swagger_issue": "Неправильний HTTP метод або URL",
             },
             "update": {
                 "pattern": "PUT /api/{resource}/{id}",
                 "example": "PUT /api/categories/123",
                 "description": "Оновлення запису",
-                "swagger_issue": "Неправильний HTTP метод або відсутній ID"
+                "swagger_issue": "Неправильний HTTP метод або відсутній ID",
             },
             "delete": {
                 "pattern": "DELETE /api/{resource}/{id}",
                 "example": "DELETE /api/categories/123",
                 "description": "Видалення запису",
-                "swagger_issue": "Неправильний HTTP метод або відсутній ID"
-            }
+                "swagger_issue": "Неправильний HTTP метод або відсутній ID",
+            },
         }
+
 
 # Приклади використання
 if __name__ == "__main__":
     # Приклад проблемної ситуації
     user_query = "Покажи всі категорії"
-    
+
     swagger_endpoints = [
         {
             "url": "https://db62d2b2c3a5.ngrok-free.app/api/category/{id}",
             "method": "GET",
-            "description": "Get a category by ID (Public)"
+            "description": "Get a category by ID (Public)",
         }
     ]
-    
+
     api_error = {
-        "message": "invalid input syntax for type uuid: \"{id}\"",
+        "message": 'invalid input syntax for type uuid: "{id}"',
         "error": "Bad Request",
-        "statusCode": 400
+        "statusCode": 400,
     }
-    
+
     # Генеруємо промпт для виявлення невідповідності
     detection_prompt = SwaggerErrorHandler.get_swagger_mismatch_detection_prompt(
         user_query, swagger_endpoints, api_error
     )
-    
+
     print("🔍 Промпт для виявлення невідповідності Swagger:")
     print(detection_prompt)
     print()
-    
+
     # Генеруємо дружелюбне повідомлення про помилку
     error_message = SwaggerErrorHandler.get_user_friendly_error_message(
         "swagger_mismatch",
         user_query,
         "Swagger специфікація містить endpoint з параметром {id} замість endpoint для отримання всіх категорій",
-        "Використовуємо endpoint без параметрів для отримання всіх категорій"
+        "Використовуємо endpoint без параметрів для отримання всіх категорій",
     )
-    
+
     print("💬 Дружелюбне повідомлення про помилку:")
     print(error_message)
     print()
-    
+
     print("✅ Промпти для обробки помилок Swagger готові!")

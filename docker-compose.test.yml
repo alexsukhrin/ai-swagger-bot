@@ -11,7 +11,7 @@ services:
       - ./src:/app/src
       - ./examples:/app/examples
     command: pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
-    
+
   lint:
     build: .
     volumes:
@@ -25,13 +25,13 @@ services:
         ruff check src/ tests/ examples/ &&
         mypy src/ --ignore-missing-imports --no-strict-optional
       "
-      
+
   security:
     build: .
     volumes:
       - ./src:/app/src
     command: bandit -r src/ -f json -o bandit-report.json
-    
+
   format:
     build: .
     volumes:
