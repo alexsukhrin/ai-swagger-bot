@@ -13,11 +13,13 @@ from sqlalchemy.pool import StaticPool
 from .models import Base
 
 # Налаштування бази даних
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_swagger_bot.db")  # SQLite для розробки
+DATABASE_URL = os.getenv(
+    "DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/ai_swagger_bot"
+)
 
 # Створюємо engine
 if DATABASE_URL.startswith("sqlite"):
-    # SQLite налаштування
+    # SQLite налаштування (для тестування)
     engine = create_engine(
         DATABASE_URL,
         connect_args={"check_same_thread": False},

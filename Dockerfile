@@ -1,20 +1,21 @@
 # Використовуємо офіційний Python образ
-FROM python:3.11-slim
+FROM python:3.9-slim
 
 # Встановлюємо системні залежності
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Встановлюємо робочу директорію
 WORKDIR /app
 
 # Копіюємо файли залежностей
-COPY requirements.txt .
+COPY requirements.txt requirements-dev.txt ./
 
-# Встановлюємо Python залежності
-RUN pip install --no-cache-dir -r requirements.txt
+# Встановлюємо Python залежності (включаючи dev залежності)
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
 # Копіюємо код додатку
 COPY . .
@@ -34,6 +35,7 @@ ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
 ENV STREAMLIT_SERVER_HEADLESS=true
 ENV STREAMLIT_SERVER_ENABLE_CORS=false
 ENV STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
+ENV API_BASE_URL=http://api:8000
 
-# Команда за замовчуванням
-CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+# Команда за замовчуванням для Streamlit
+CMD ["streamlit", "run", "streamlit_frontend.py", "--server.port=8501", "--server.address=0.0.0.0"]

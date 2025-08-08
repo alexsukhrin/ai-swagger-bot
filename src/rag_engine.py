@@ -1,47 +1,37 @@
 """
-RAG (Retrieval-Augmented Generation) двигун для роботи з API endpoints.
-Використовує векторну базу даних для зберігання та пошуку інформації про API.
+RAG двигун для роботи з API endpoints.
 """
 
-import json
 import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from langchain.schema import Document
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.vectorstores import Chroma
 from langchain_openai import OpenAIEmbeddings
 
-# Імпортуємо enhanced_swagger_parser
-try:
-    from .enhanced_swagger_parser import EnhancedSwaggerParser
-except ImportError:
-    from enhanced_swagger_parser import EnhancedSwaggerParser
+from src.enhanced_swagger_parser import EnhancedSwaggerParser
+from src.postgres_vector_manager import PostgresVectorManager
 
-# Налаштовуємо логування
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class RAGEngine:
-    """RAG двигун для роботи з API endpoints."""
+class PostgresRAGEngine:
+    """RAG двигун з використанням PostgreSQL та pgvector."""
 
-    def __init__(
-        self, swagger_spec_path: str, persist_directory: str = None, config: Dict[str, Any] = None
-    ):
+    def __init__(self, user_id: str, swagger_spec_id: str, config: Dict[str, Any] = None):
         """
-        Ініціалізація RAG двигуна.
+        Ініціалізація PostgreSQL RAG двигуна.
 
         Args:
-            swagger_spec_path: Шлях до Swagger специфікації
-            persist_directory: Директорія для зберігання векторної бази
+            user_id: ID користувача
+            swagger_spec_id: ID Swagger специфікації
             config: Конфігурація RAG
         """
         from src.config import Config
 
-        self.swagger_spec_path = swagger_spec_path
-        self.persist_directory = persist_directory or Config.CHROMA_DB_PATH
+        self.user_id = user_id
+        self.swagger_spec_id = swagger_spec_id
+        self.vector_manager = PostgresVectorManager()
 
         # Використовуємо конфігурацію або значення за замовчуванням
         if config:
@@ -55,31 +45,23 @@ class RAGEngine:
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size, chunk_overlap=chunk_overlap, separators=["\n\n", "\n", " ", ""]
         )
-        self.vectorstore = None
 
-        logger.info(f"Ініціалізація RAG Engine: {swagger_spec_path}")
-        logger.info(f"Директорія бази: {self.persist_directory}")
+        logger.info(f"Ініціалізація PostgreSQL RAG Engine для користувача {user_id}")
 
-        # Ініціалізуємо базу
-        self._initialize_vectorstore()
+    def create_vectorstore_from_swagger(self, swagger_spec_path: str) -> bool:
+        """
+        Створює векторну базу з Swagger специфікації для конкретного користувача.
 
-    def _initialize_vectorstore(self):
-        """Ініціалізація векторної бази даних."""
-        try:
-            # Спробуємо завантажити існуючу базу
-            if not self.load_vectorstore():
-                # Створюємо нову базу
-                self._create_vectorstore_from_swagger()
-        except Exception as e:
-            logger.error(f"Помилка ініціалізації векторної бази: {e}")
-            raise
+        Args:
+            swagger_spec_path: Шлях до Swagger файлу
 
-    def _create_vectorstore_from_swagger(self):
-        """Створює векторну базу з Swagger специфікації."""
+        Returns:
+            True якщо успішно створено
+        """
         try:
             logger.info("Парсинг Swagger специфікації...")
             # Парсимо Swagger файл
-            parser = EnhancedSwaggerParser(self.swagger_spec_path)
+            parser = EnhancedSwaggerParser(swagger_spec_path)
 
             # Використовуємо новий метод для створення chunks
             chunks = parser.create_enhanced_endpoint_chunks()
@@ -88,155 +70,124 @@ class RAGEngine:
             # Створюємо векторну базу
             self.create_vectorstore(chunks)
             logger.info("Векторна база створена успішно")
+            return True
 
         except Exception as e:
             logger.error(f"Помилка створення векторної бази: {e}")
-            raise
+            return False
 
     def create_vectorstore(self, chunks: List[Dict[str, Any]]) -> None:
         """
-        Створює векторну базу даних з chunks.
+        Створює векторну базу даних з chunks для конкретного користувача.
 
         Args:
             chunks: Список chunks з метаданими
         """
-        documents = []
-
         for chunk in chunks:
-            # Створюємо Document об'єкт для LangChain
-            doc = Document(page_content=chunk["text"], metadata=chunk["metadata"])
-            documents.append(doc)
+            try:
+                # Створюємо ембедінг для тексту
+                embedding = self.embeddings.embed_query(chunk["text"])
 
-        # Створюємо векторну базу без розбиття на частини
-        # щоб уникнути дублікатів endpoints
-        self.vectorstore = Chroma.from_documents(
-            documents=documents, embedding=self.embeddings, persist_directory=self.persist_directory
-        )
-
-        # Зберігаємо базу
-        self.vectorstore.persist()
-
-    def load_vectorstore(self) -> bool:
-        """
-        Завантажує існуючу векторну базу.
-
-        Returns:
-            True якщо база завантажена успішно, False інакше
-        """
-        try:
-            if os.path.exists(self.persist_directory):
-                logger.info(f"Завантаження існуючої бази: {self.persist_directory}")
-                self.vectorstore = Chroma(
-                    persist_directory=self.persist_directory, embedding_function=self.embeddings
+                # Додаємо в PostgreSQL з прив'язкою до користувача
+                self.vector_manager.add_embedding(
+                    user_id=self.user_id,
+                    swagger_spec_id=self.swagger_spec_id,
+                    endpoint_path=chunk["metadata"].get("path", ""),
+                    method=chunk["metadata"].get("method", "GET"),
+                    description=chunk["text"],
+                    embedding=embedding,
+                    metadata=chunk["metadata"],
                 )
-                logger.info("База завантажена успішно")
-                return True
-        except Exception as e:
-            logger.error(f"Помилка завантаження векторної бази: {e}")
-        return False
+            except Exception as e:
+                logger.error(f"Помилка створення вектора: {e}")
+                continue
 
-    def search_similar_endpoints(self, query: str, k: int = 3) -> List[Dict[str, Any]]:
+    def search_similar_endpoints(self, query: str, limit: int = 3) -> List[Dict[str, Any]]:
         """
-        Шукає подібні endpoints за запитом.
+        Шукає подібні endpoints для конкретного користувача.
 
         Args:
             query: Пошуковий запит
-            k: Кількість результатів для повернення
+            limit: Кількість результатів
 
         Returns:
-            Список релевантних endpoints з метаданими
+            Список знайдених endpoints
         """
-        if not self.vectorstore:
-            return []
-
         try:
-            # Виконуємо пошук
-            docs = self.vectorstore.similarity_search(query, k=k)
+            # Створюємо ембедінг для запиту
+            query_embedding = self.embeddings.embed_query(query)
 
-            results = []
-            for doc in docs:
-                result = {"content": doc.page_content, "metadata": doc.metadata}
-                results.append(result)
+            # Шукаємо подібні вектори
+            results = self.vector_manager.search_similar(
+                query_embedding=query_embedding,
+                user_id=self.user_id,
+                swagger_spec_id=self.swagger_spec_id,
+                limit=limit,
+            )
 
+            logger.info(
+                f"🔍 Знайдено {len(results)} подібних endpoints для користувача {self.user_id}"
+            )
             return results
+
         except Exception as e:
             logger.error(f"Помилка пошуку endpoints: {e}")
             return []
 
-    def get_endpoint_by_method_and_path(self, method: str, path: str) -> Optional[Dict[str, Any]]:
-        """
-        Знаходить конкретний endpoint за методом та шляхом.
-
-        Args:
-            method: HTTP метод (GET, POST, etc.)
-            path: Шлях endpoint
-
-        Returns:
-            Endpoint з метаданими або None
-        """
-        if not self.vectorstore:
-            return None
-
-        try:
-            # Створюємо запит для пошуку конкретного endpoint
-            query = f"{method} {path}"
-            docs = self.vectorstore.similarity_search(query, k=1)
-
-            if docs:
-                return {"content": docs[0].page_content, "metadata": docs[0].metadata}
-        except Exception as e:
-            logger.error(f"Помилка пошуку endpoint: {e}")
-
-        return None
-
     def get_all_endpoints(self) -> List[Dict[str, Any]]:
         """
-        Отримує всі endpoints з бази.
+        Отримує всі endpoints для конкретного користувача.
 
         Returns:
-            Список всіх endpoints з метаданими
+            Список всіх endpoints користувача
         """
-        if not self.vectorstore:
-            logger.warning("Vectorstore не ініціалізовано")
-            return []
-
         try:
-            # Отримуємо всі документи
-            docs = self.vectorstore.get()
+            results = self.vector_manager.get_embeddings_for_user(
+                user_id=self.user_id, swagger_spec_id=self.swagger_spec_id
+            )
 
-            results = []
-            documents = docs.get("documents", [])
-            metadatas = docs.get("metadatas", [])
-
-            logger.info(f"Знайдено {len(documents)} документів в базі")
-
-            for i, content in enumerate(documents):
-                metadata = metadatas[i] if i < len(metadatas) else {}
-                results.append({"content": content, "metadata": metadata})
-
-                # Логуємо перші кілька endpoints для діагностики
-                if i < 3:
-                    method = metadata.get("method", "UNKNOWN")
-                    path = metadata.get("path", "UNKNOWN")
-                    logger.info(f"Endpoint {i+1}: {method} {path}")
-
-            logger.info(f"Повертаю {len(results)} endpoints")
+            logger.info(f"📋 Отримано {len(results)} endpoints для користувача {self.user_id}")
             return results
+
         except Exception as e:
             logger.error(f"Помилка отримання endpoints: {e}")
             return []
 
-    def clear_database(self) -> None:
-        """Очищає векторну базу даних."""
+    def delete_user_embeddings(self) -> bool:
+        """
+        Видаляє всі embeddings для конкретного користувача.
+
+        Returns:
+            True якщо успішно видалено
+        """
         try:
-            if self.vectorstore:
-                self.vectorstore.delete_collection()
-                self.vectorstore = None
+            success = self.vector_manager.delete_embeddings_for_user(
+                user_id=self.user_id, swagger_spec_id=self.swagger_spec_id
+            )
 
-            # Видаляємо директорію
-            import shutil
+            if success:
+                logger.info(f"✅ Видалено embeddings для користувача {self.user_id}")
+            else:
+                logger.error(f"❌ Помилка видалення embeddings для користувача {self.user_id}")
 
-            if os.path.exists(self.persist_directory):
-                shutil.rmtree(self.persist_directory)
+            return success
+
         except Exception as e:
-            print(f"Помилка очищення бази: {e}")
+            logger.error(f"Помилка видалення embeddings: {e}")
+            return False
+
+    def get_statistics(self) -> Dict[str, Any]:
+        """
+        Отримує статистику по embeddings для користувача.
+
+        Returns:
+            Словник зі статистикою
+        """
+        try:
+            stats = self.vector_manager.get_statistics(user_id=self.user_id)
+            logger.info(f"📊 Статистика для користувача {self.user_id}: {stats}")
+            return stats
+
+        except Exception as e:
+            logger.error(f"Помилка отримання статистики: {e}")
+            return {}

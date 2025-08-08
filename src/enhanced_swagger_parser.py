@@ -1,474 +1,381 @@
 """
-Покращений парсер для Swagger/OpenAPI специфікацій.
-Детально аналізує всі поля, enum, параметри, типізацію та валідацію.
+Розширений парсер Swagger специфікацій.
 """
 
 import json
-from dataclasses import dataclass, field
-from enum import Enum
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Set
+import logging
+from typing import Any, Dict, List, Optional
 
-import yaml
-
-
-@dataclass
-class ParameterInfo:
-    """Детальна інформація про параметр."""
-
-    name: str
-    location: str  # path, query, header, cookie
-    type: str
-    required: bool = False
-    description: str = ""
-    default: Any = None
-    enum_values: List[Any] = field(default_factory=list)
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    min_length: Optional[int] = None
-    max_length: Optional[int] = None
-    pattern: Optional[str] = None
-    format: Optional[str] = None  # date, email, uuid, etc.
-
-
-@dataclass
-class SchemaField:
-    """Детальна інформація про поле схеми."""
-
-    name: str
-    type: str
-    description: str = ""
-    required: bool = False
-    default: Any = None
-    enum_values: List[Any] = field(default_factory=list)
-    min_value: Optional[float] = None
-    max_value: Optional[float] = None
-    min_length: Optional[int] = None
-    max_length: Optional[int] = None
-    pattern: Optional[str] = None
-    format: Optional[str] = None
-    example: Any = None
-    nullable: bool = False
-    read_only: bool = False
-    write_only: bool = False
-
-
-@dataclass
-class SchemaInfo:
-    """Детальна інформація про схему."""
-
-    name: str
-    type: str  # object, array, string, number, integer, boolean
-    description: str = ""
-    properties: Dict[str, SchemaField] = field(default_factory=dict)
-    required_fields: List[str] = field(default_factory=list)
-    enum_values: List[Any] = field(default_factory=list)
-    example: Any = None
-    additional_properties: bool = False
-
-
-@dataclass
-class EndpointInfo:
-    """Розширена інформація про API endpoint."""
-
-    method: str
-    path: str
-    summary: str
-    description: str
-    parameters: List[ParameterInfo]
-    request_body: Optional[Dict[str, Any]]
-    responses: Dict[str, Any]
-    tags: List[str]
-    operation_id: Optional[str] = None
-    deprecated: bool = False
-    security: List[Dict[str, Any]] = field(default_factory=list)
-
-    # Додаткова інформація для кращого розуміння
-    path_variables: List[str] = field(default_factory=list)
-    query_parameters: List[str] = field(default_factory=list)
-    required_parameters: List[str] = field(default_factory=list)
-    optional_parameters: List[str] = field(default_factory=list)
+logger = logging.getLogger(__name__)
 
 
 class EnhancedSwaggerParser:
-    """Покращений парсер для Swagger/OpenAPI специфікацій."""
+    """Розширений парсер Swagger специфікацій."""
 
-    def __init__(self, spec_path: str):
+    def __init__(self, swagger_spec_path: str = None):
         """
         Ініціалізація парсера.
 
         Args:
-            spec_path: Шлях до Swagger/OpenAPI файлу
+            swagger_spec_path: Шлях до Swagger файлу
         """
-        self.swagger_spec_path = spec_path
-        self.spec_path = Path(spec_path)
-        self.spec_data = self._load_spec()
-        self.schemas_cache = {}
-        self._parse_schemas()
+        self.swagger_spec_path = swagger_spec_path
+        self.swagger_data = None
 
-    def _load_spec(self) -> Dict[str, Any]:
-        """Завантажує специфікацію з файлу."""
-        if not self.spec_path.exists():
-            raise FileNotFoundError(f"Файл {self.spec_path} не знайдено")
+        if swagger_spec_path:
+            self.load_swagger_spec()
 
-        with open(self.spec_path, "r", encoding="utf-8") as f:
-            if self.spec_path.suffix.lower() in [".yaml", ".yml"]:
-                return yaml.safe_load(f)
-            else:
-                return json.load(f)
+    def load_swagger_spec(self) -> None:
+        """Завантажує Swagger специфікацію з файлу."""
+        try:
+            with open(self.swagger_spec_path, "r", encoding="utf-8") as f:
+                self.swagger_data = json.load(f)
+            logger.info(f"✅ Завантажено Swagger специфікацію: {self.swagger_spec_path}")
+        except Exception as e:
+            logger.error(f"❌ Помилка завантаження Swagger специфікації: {e}")
+            raise
 
-    def _parse_schemas(self):
-        """Парсить всі схеми та кешує їх."""
-        schemas = self.get_schemas()
-        for schema_name, schema_data in schemas.items():
-            self.schemas_cache[schema_name] = self._parse_schema(schema_name, schema_data)
+    def parse_swagger_spec(self, swagger_data: dict) -> dict:
+        """
+        Парсить Swagger специфікацію.
 
-    def _parse_schema(self, name: str, schema_data: Dict[str, Any]) -> SchemaInfo:
-        """Парсить окрему схему."""
-        schema_type = schema_data.get("type", "object")
-        description = schema_data.get("description", "")
-        required_fields = schema_data.get("required", [])
-        properties = schema_data.get("properties", {})
+        Args:
+            swagger_data: Дані Swagger специфікації
 
-        schema_fields = {}
-        for field_name, field_data in properties.items():
-            field = self._parse_schema_field(field_name, field_data, field_name in required_fields)
-            schema_fields[field_name] = field
+        Returns:
+            Розпарсені дані
+        """
+        self.swagger_data = swagger_data
 
-        return SchemaInfo(
-            name=name,
-            type=schema_type,
-            description=description,
-            properties=schema_fields,
-            required_fields=required_fields,
-            enum_values=schema_data.get("enum", []),
-            example=schema_data.get("example"),
-            additional_properties=schema_data.get("additionalProperties", False),
-        )
+        try:
+            # Отримуємо base URL
+            base_url = self.get_base_url()
 
-    def _parse_schema_field(
-        self, name: str, field_data: Dict[str, Any], required: bool
-    ) -> SchemaField:
-        """Парсить поле схеми."""
-        field_type = field_data.get("type", "string")
-        description = field_data.get("description", "")
-        default = field_data.get("default")
-        enum_values = field_data.get("enum", [])
-        example = field_data.get("example")
+            # Отримуємо endpoints
+            endpoints = self.get_endpoints()
 
-        # Валідаційні правила
-        min_value = field_data.get("minimum")
-        max_value = field_data.get("maximum")
-        min_length = field_data.get("minLength")
-        max_length = field_data.get("maxLength")
-        pattern = field_data.get("pattern")
-        format_type = field_data.get("format")
+            # Отримуємо схеми
+            schemas = self.get_schemas()
 
-        return SchemaField(
-            name=name,
-            type=field_type,
-            description=description,
-            required=required,
-            default=default,
-            enum_values=enum_values,
-            min_value=min_value,
-            max_value=max_value,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            format=format_type,
-            example=example,
-            nullable=field_data.get("nullable", False),
-            read_only=field_data.get("readOnly", False),
-            write_only=field_data.get("writeOnly", False),
-        )
+            # Отримуємо інформацію про API
+            api_info = self.get_api_info()
 
-    def _parse_parameter(self, param_data: Dict[str, Any]) -> ParameterInfo:
-        """Парсить параметр endpoint."""
-        name = param_data.get("name", "")
-        location = param_data.get("in", "query")
-        schema = param_data.get("schema", {})
-        param_type = schema.get("type", "string")
-        required = param_data.get("required", False)
-        description = param_data.get("description", "")
-        default = param_data.get("default")
+            # Отримуємо security schemes
+            security_schemes = self.get_security_schemes()
 
-        # Enum значення
-        enum_values = schema.get("enum", [])
+            parsed_data = {
+                "base_url": base_url,
+                "endpoints": endpoints,
+                "schemas": schemas,
+                "api_info": api_info,
+                "security_schemes": security_schemes,
+            }
 
-        # Валідаційні правила
-        min_value = schema.get("minimum")
-        max_value = schema.get("maximum")
-        min_length = schema.get("minLength")
-        max_length = schema.get("maxLength")
-        pattern = schema.get("pattern")
-        format_type = schema.get("format")
+            logger.info(
+                f"✅ Розпарсено Swagger специфікацію: {len(endpoints)} endpoints, base_url: {base_url}"
+            )
+            return parsed_data
 
-        return ParameterInfo(
-            name=name,
-            location=location,
-            type=param_type,
-            required=required,
-            description=description,
-            default=default,
-            enum_values=enum_values,
-            min_value=min_value,
-            max_value=max_value,
-            min_length=min_length,
-            max_length=max_length,
-            pattern=pattern,
-            format=format_type,
-        )
+        except Exception as e:
+            logger.error(f"❌ Помилка парсингу Swagger специфікації: {e}")
+            raise
 
-    def get_endpoints(self) -> List[EndpointInfo]:
-        """Отримує всі endpoints з детальним аналізом."""
+    def get_base_url(self) -> Optional[str]:
+        """
+        Отримує base URL з Swagger специфікації.
+
+        Returns:
+            Base URL або None
+        """
+        try:
+            if not self.swagger_data:
+                return None
+
+            # Спробуємо отримати з servers
+            servers = self.swagger_data.get("servers", [])
+            if servers:
+                # Беремо перший сервер
+                server_url = servers[0].get("url", "")
+                if server_url:
+                    # Якщо URL відносний, додаємо протокол
+                    if server_url.startswith("/"):
+                        server_url = "https://localhost" + server_url
+                    elif not server_url.startswith(("http://", "https://")):
+                        server_url = "https://" + server_url
+                    return server_url
+
+            # Спробуємо отримати з host та schemes
+            host = self.swagger_data.get("host")
+            schemes = self.swagger_data.get("schemes", ["https"])
+
+            if host:
+                scheme = schemes[0] if schemes else "https"
+                base_path = self.swagger_data.get("basePath", "")
+                return f"{scheme}://{host}{base_path}"
+
+            # Спробуємо отримати з info.x-* поля
+            info = self.swagger_data.get("info", {})
+            for key, value in info.items():
+                if key.startswith("x-") and "url" in key.lower():
+                    if isinstance(value, str) and value:
+                        return value
+
+            logger.warning("⚠️ Не вдалося визначити base URL з Swagger специфікації")
+            return None
+
+        except Exception as e:
+            logger.error(f"❌ Помилка отримання base URL: {e}")
+            return None
+
+    def get_endpoints(self) -> List[Dict[str, Any]]:
+        """
+        Отримує список endpoints з Swagger специфікації.
+
+        Returns:
+            Список endpoints
+        """
         endpoints = []
 
-        if "paths" not in self.spec_data:
+        try:
+            paths = self.swagger_data.get("paths", {})
+
+            for path, path_data in paths.items():
+                for method, method_data in path_data.items():
+                    if method.upper() in [
+                        "GET",
+                        "POST",
+                        "PUT",
+                        "DELETE",
+                        "PATCH",
+                        "HEAD",
+                        "OPTIONS",
+                    ]:
+                        endpoint = {
+                            "path": path,
+                            "method": method.upper(),
+                            "summary": method_data.get("summary", ""),
+                            "description": method_data.get("description", ""),
+                            "operation_id": method_data.get("operationId", ""),
+                            "tags": method_data.get("tags", []),
+                            "parameters": self._parse_parameters(method_data.get("parameters", [])),
+                            "responses": self._parse_responses(method_data.get("responses", {})),
+                            "security": method_data.get("security", []),
+                            "deprecated": method_data.get("deprecated", False),
+                        }
+                        endpoints.append(endpoint)
+
             return endpoints
 
-        for path, path_data in self.spec_data["paths"].items():
-            for method, method_data in path_data.items():
-                if method.upper() in ["GET", "POST", "PUT", "DELETE", "PATCH"]:
-                    # Парсимо параметри
-                    parameters = []
-                    for param_data in method_data.get("parameters", []):
-                        param = self._parse_parameter(param_data)
-                        parameters.append(param)
+        except Exception as e:
+            logger.error(f"❌ Помилка отримання endpoints: {e}")
+            return []
 
-                    # Аналізуємо path variables
-                    path_variables = [p.name for p in parameters if p.location == "path"]
-                    query_parameters = [p.name for p in parameters if p.location == "query"]
-                    required_parameters = [p.name for p in parameters if p.required]
-                    optional_parameters = [p.name for p in parameters if not p.required]
+    def _parse_parameters(self, parameters: List[Dict]) -> List[Dict]:
+        """Парсить параметри endpoint."""
+        parsed_params = []
 
-                    endpoint = EndpointInfo(
-                        method=method.upper(),
-                        path=path,
-                        summary=method_data.get("summary", ""),
-                        description=method_data.get("description", ""),
-                        parameters=parameters,
-                        request_body=method_data.get("requestBody"),
-                        responses=method_data.get("responses", {}),
-                        tags=method_data.get("tags", []),
-                        operation_id=method_data.get("operationId"),
-                        deprecated=method_data.get("deprecated", False),
-                        security=method_data.get("security", []),
-                        path_variables=path_variables,
-                        query_parameters=query_parameters,
-                        required_parameters=required_parameters,
-                        optional_parameters=optional_parameters,
-                    )
-                    endpoints.append(endpoint)
+        for param in parameters:
+            parsed_param = {
+                "name": param.get("name", ""),
+                "in": param.get("in", ""),
+                "required": param.get("required", False),
+                "type": param.get("type", ""),
+                "description": param.get("description", ""),
+                "schema": param.get("schema", {}),
+            }
+            parsed_params.append(parsed_param)
 
-        return endpoints
+        return parsed_params
+
+    def _parse_responses(self, responses: Dict) -> List[Dict]:
+        """Парсить відповіді endpoint."""
+        parsed_responses = []
+
+        for status_code, response_data in responses.items():
+            parsed_response = {
+                "status_code": status_code,
+                "description": response_data.get("description", ""),
+                "schema": response_data.get("schema", {}),
+                "headers": response_data.get("headers", {}),
+            }
+            parsed_responses.append(parsed_response)
+
+        return parsed_responses
 
     def get_schemas(self) -> Dict[str, Any]:
-        """Отримує схеми даних зі специфікації."""
-        return self.spec_data.get("components", {}).get("schemas", {})
+        """
+        Отримує схеми з Swagger специфікації.
 
-    def get_schema_info(self, schema_name: str) -> Optional[SchemaInfo]:
-        """Отримує детальну інформацію про схему."""
-        return self.schemas_cache.get(schema_name)
+        Returns:
+            Словник схем
+        """
+        try:
+            components = self.swagger_data.get("components", {})
+            schemas = components.get("schemas", {})
 
-    def get_all_schemas_info(self) -> Dict[str, SchemaInfo]:
-        """Отримує інформацію про всі схеми."""
-        return self.schemas_cache
+            # Парсимо схеми
+            parsed_schemas = {}
+            for schema_name, schema_data in schemas.items():
+                parsed_schema = {
+                    "type": schema_data.get("type", ""),
+                    "properties": schema_data.get("properties", {}),
+                    "required": schema_data.get("required", []),
+                    "description": schema_data.get("description", ""),
+                    "example": schema_data.get("example", {}),
+                }
+                parsed_schemas[schema_name] = parsed_schema
 
-    def get_base_url(self) -> str:
-        """Отримує базовий URL API."""
-        servers = self.spec_data.get("servers", [])
-        if servers:
-            return servers[0].get("url", "")
-        return ""
+            return parsed_schemas
+
+        except Exception as e:
+            logger.error(f"❌ Помилка отримання схем: {e}")
+            return {}
 
     def get_api_info(self) -> Dict[str, Any]:
-        """Отримує загальну інформацію про API."""
-        info = self.spec_data.get("info", {})
-        return {
-            "title": info.get("title", ""),
-            "version": info.get("version", ""),
-            "description": info.get("description", ""),
-            "contact": info.get("contact", {}),
-            "license": info.get("license", {}),
-            "base_url": self.get_base_url(),
-            "servers": self.spec_data.get("servers", []),
-        }
+        """
+        Отримує інформацію про API.
+
+        Returns:
+            Інформація про API
+        """
+        try:
+            info = self.swagger_data.get("info", {})
+
+            return {
+                "title": info.get("title", ""),
+                "description": info.get("description", ""),
+                "version": info.get("version", ""),
+                "contact": info.get("contact", {}),
+                "license": info.get("license", {}),
+                "terms_of_service": info.get("termsOfService", ""),
+            }
+
+        except Exception as e:
+            logger.error(f"❌ Помилка отримання інформації про API: {e}")
+            return {}
 
     def get_security_schemes(self) -> Dict[str, Any]:
-        """Отримує схеми безпеки."""
-        return self.spec_data.get("components", {}).get("securitySchemes", {})
+        """
+        Отримує security schemes з Swagger специфікації.
 
-    def find_endpoints_by_tag(self, tag: str) -> List[EndpointInfo]:
-        """Знаходить endpoints за тегом."""
-        return [ep for ep in self.get_endpoints() if tag in ep.tags]
+        Returns:
+            Словник security schemes
+        """
+        try:
+            components = self.swagger_data.get("components", {})
+            security_schemes = components.get("securitySchemes", {})
 
-    def find_endpoints_by_method(self, method: str) -> List[EndpointInfo]:
-        """Знаходить endpoints за методом."""
-        return [ep for ep in self.get_endpoints() if ep.method.upper() == method.upper()]
+            return security_schemes
 
-    def get_required_fields_for_endpoint(self, endpoint: EndpointInfo) -> List[str]:
-        """Отримує всі обов'язкові поля для endpoint."""
-        required_fields = []
-
-        # Параметри
-        for param in endpoint.parameters:
-            if param.required:
-                required_fields.append(param.name)
-
-        # Request body
-        if endpoint.request_body:
-            content = endpoint.request_body.get("content", {})
-            for content_type, content_data in content.items():
-                if content_type == "application/json":
-                    schema_ref = content_data.get("schema", {}).get("$ref", "")
-                    if schema_ref:
-                        schema_name = schema_ref.split("/")[-1]
-                        schema_info = self.get_schema_info(schema_name)
-                        if schema_info:
-                            required_fields.extend(schema_info.required_fields)
-
-        return required_fields
-
-    def get_validation_rules_for_field(self, schema_name: str, field_name: str) -> Dict[str, Any]:
-        """Отримує правила валідації для поля."""
-        schema_info = self.get_schema_info(schema_name)
-        if schema_info and field_name in schema_info.properties:
-            field = schema_info.properties[field_name]
-            return {
-                "type": field.type,
-                "required": field.required,
-                "enum_values": field.enum_values,
-                "min_value": field.min_value,
-                "max_value": field.max_value,
-                "min_length": field.min_length,
-                "max_length": field.max_length,
-                "pattern": field.pattern,
-                "format": field.format,
-                "example": field.example,
-                "nullable": field.nullable,
-            }
-        return {}
+        except Exception as e:
+            logger.error(f"❌ Помилка отримання security schemes: {e}")
+            return {}
 
     def create_enhanced_endpoint_chunks(self) -> List[Dict[str, Any]]:
         """
-        Створює покращені chunks для RAG системи з детальною інформацією.
+        Створює покращені chunks для embeddings.
 
         Returns:
-            Список chunks з метаданими для векторної бази
+            Список chunks з метаданими
         """
         chunks = []
-        endpoints = self.get_endpoints()
 
-        for endpoint in endpoints:
-            # Створюємо детальний опис endpoint
-            chunk_text = self._create_enhanced_endpoint_description(endpoint)
+        try:
+            endpoints = self.get_endpoints()
+            base_url = self.get_base_url()
 
-            chunk = {
-                "text": chunk_text,
-                "metadata": {
-                    "method": endpoint.method,
-                    "path": endpoint.path,
-                    "summary": endpoint.summary,
-                    "tags": ", ".join(endpoint.tags) if endpoint.tags else "",
-                    "operation_id": endpoint.operation_id or "",
-                    "deprecated": endpoint.deprecated,
-                    "has_request_body": endpoint.request_body is not None,
-                    "required_parameters": (
-                        ", ".join(endpoint.required_parameters)
-                        if endpoint.required_parameters
-                        else ""
-                    ),
-                    "optional_parameters": (
-                        ", ".join(endpoint.optional_parameters)
-                        if endpoint.optional_parameters
-                        else ""
-                    ),
-                    "path_variables": (
-                        ", ".join(endpoint.path_variables) if endpoint.path_variables else ""
-                    ),
-                    "query_parameters": (
-                        ", ".join(endpoint.query_parameters) if endpoint.query_parameters else ""
-                    ),
-                },
-            }
-            chunks.append(chunk)
+            for endpoint in endpoints:
+                # Створюємо текст для embedding
+                text_parts = []
 
-        return chunks
+                # Основна інформація
+                text_parts.append(f"Endpoint: {endpoint['method']} {endpoint['path']}")
 
-    def _create_enhanced_endpoint_description(self, endpoint: EndpointInfo) -> str:
-        """Створює детальний опис endpoint для RAG."""
-        description_parts = [
-            f"Endpoint: {endpoint.method} {endpoint.path}",
-            f"Summary: {endpoint.summary}",
-            f"Description: {endpoint.description}",
-        ]
+                if endpoint["summary"]:
+                    text_parts.append(f"Summary: {endpoint['summary']}")
 
-        if endpoint.operation_id:
-            description_parts.append(f"Operation ID: {endpoint.operation_id}")
+                if endpoint["description"]:
+                    text_parts.append(f"Description: {endpoint['description']}")
 
-        if endpoint.deprecated:
-            description_parts.append("⚠️ DEPRECATED")
+                if endpoint["operation_id"]:
+                    text_parts.append(f"Operation ID: {endpoint['operation_id']}")
 
-        if endpoint.tags:
-            description_parts.append(f"Tags: {', '.join(endpoint.tags)}")
+                # Параметри
+                if endpoint["parameters"]:
+                    text_parts.append("Parameters:")
+                    for param in endpoint["parameters"]:
+                        param_text = f"  - {param['name']} ({param['in']})"
+                        if param["required"]:
+                            param_text += " [required]"
+                        if param["description"]:
+                            param_text += f": {param['description']}"
+                        text_parts.append(param_text)
 
-        # Детальна інформація про параметри
-        if endpoint.parameters:
-            description_parts.append("\nParameters:")
-            for param in endpoint.parameters:
-                param_desc = f"- {param.name} ({param.type}) [{param.location}]"
-                if param.required:
-                    param_desc += " [REQUIRED]"
-                if param.description:
-                    param_desc += f": {param.description}"
-                if param.enum_values:
-                    param_desc += f" [Enum: {', '.join(map(str, param.enum_values))}]"
-                if param.min_value is not None:
-                    param_desc += f" [Min: {param.min_value}]"
-                if param.max_value is not None:
-                    param_desc += f" [Max: {param.max_value}]"
-                if param.pattern:
-                    param_desc += f" [Pattern: {param.pattern}]"
-                description_parts.append(param_desc)
+                # Відповіді
+                if endpoint["responses"]:
+                    text_parts.append("Responses:")
+                    for response in endpoint["responses"]:
+                        response_text = f"  - {response['status_code']}"
+                        if response["description"]:
+                            response_text += f": {response['description']}"
+                        text_parts.append(response_text)
 
-        # Детальна інформація про request body
-        if endpoint.request_body:
-            description_parts.append("\nRequest Body:")
-            content = endpoint.request_body.get("content", {})
-            for content_type, content_data in content.items():
-                if content_type == "application/json":
-                    schema_ref = content_data.get("schema", {}).get("$ref", "")
-                    if schema_ref:
-                        schema_name = schema_ref.split("/")[-1]
-                        schema_info = self.get_schema_info(schema_name)
-                        if schema_info:
-                            description_parts.append(f"Schema: {schema_name}")
-                            description_parts.append(f"Type: {schema_info.type}")
-                            if schema_info.description:
-                                description_parts.append(f"Description: {schema_info.description}")
+                # Теги
+                if endpoint["tags"]:
+                    text_parts.append(f"Tags: {', '.join(endpoint['tags'])}")
 
-                            if schema_info.properties:
-                                description_parts.append("Fields:")
-                                for field_name, field in schema_info.properties.items():
-                                    field_desc = f"  - {field_name} ({field.type})"
-                                    if field.required:
-                                        field_desc += " [REQUIRED]"
-                                    if field.description:
-                                        field_desc += f": {field.description}"
-                                    if field.enum_values:
-                                        field_desc += (
-                                            f" [Enum: {', '.join(map(str, field.enum_values))}]"
-                                        )
-                                    if field.example:
-                                        field_desc += f" [Example: {field.example}]"
-                                    description_parts.append(field_desc)
+                # Security
+                if endpoint["security"]:
+                    text_parts.append(f"Security: {endpoint['security']}")
 
-        # Responses
-        if endpoint.responses:
-            description_parts.append("\nResponses:")
-            for status_code, response in endpoint.responses.items():
-                response_desc = f"- {status_code}: {response.get('description', '')}"
-                description_parts.append(response_desc)
+                # Deprecated
+                if endpoint["deprecated"]:
+                    text_parts.append("⚠️ This endpoint is deprecated")
 
-        return "\n".join(description_parts)
+                # Об'єднуємо текст
+                text = "\n".join(text_parts)
+
+                # Створюємо metadata
+                metadata = {
+                    "path": endpoint["path"],
+                    "method": endpoint["method"],
+                    "summary": endpoint["summary"],
+                    "operation_id": endpoint["operation_id"],
+                    "tags": endpoint["tags"],
+                    "deprecated": endpoint["deprecated"],
+                    "base_url": base_url,
+                    "full_url": f"{base_url}{endpoint['path']}" if base_url else endpoint["path"],
+                }
+
+                chunks.append({"text": text, "metadata": metadata})
+
+            logger.info(f"✅ Створено {len(chunks)} chunks для embeddings")
+            return chunks
+
+        except Exception as e:
+            logger.error(f"❌ Помилка створення chunks: {e}")
+            return []
+
+    def get_full_url(self, path: str) -> str:
+        """
+        Отримує повний URL для endpoint.
+
+        Args:
+            path: Шлях endpoint
+
+        Returns:
+            Повний URL
+        """
+        base_url = self.get_base_url()
+        if base_url:
+            # Видаляємо trailing slash з base_url якщо є
+            if base_url.endswith("/"):
+                base_url = base_url[:-1]
+
+            # Додаємо leading slash до path якщо немає
+            if not path.startswith("/"):
+                path = "/" + path
+
+            return base_url + path
+
+        return path

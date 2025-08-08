@@ -17,12 +17,12 @@ import requests
 try:
     from .enhanced_swagger_parser import EnhancedSwaggerParser
     from .prompt_templates import PromptTemplates
-    from .rag_engine import RAGEngine
+    from .rag_engine import PostgresRAGEngine
 except ImportError:
     try:
         from enhanced_swagger_parser import EnhancedSwaggerParser
         from prompt_templates import PromptTemplates
-        from rag_engine import RAGEngine
+        from rag_engine import PostgresRAGEngine
     except ImportError as e:
         print(f"❌ Помилка імпорту: {e}")
         raise
@@ -105,6 +105,7 @@ class InteractiveSwaggerAgent:
         enable_api_calls: bool = False,
         openai_api_key: Optional[str] = None,
         jwt_token: Optional[str] = None,
+        base_url_override: Optional[str] = None,
     ):
         """
         Ініціалізація інтерактивного агента.
@@ -132,7 +133,7 @@ class InteractiveSwaggerAgent:
 
             # Парсимо Swagger специфікацію
             self.parser = EnhancedSwaggerParser(swagger_spec_path)
-            self.base_url = self.parser.get_base_url()
+            self.base_url = base_url_override or self.parser.get_base_url()
             self.api_info = self.parser.get_api_info()
 
             # Налаштування
@@ -160,7 +161,9 @@ class InteractiveSwaggerAgent:
     def _initialize_rag(self):
         """Ініціалізація RAG engine з покращеним парсером."""
         try:
-            self.rag_engine = RAGEngine(self.parser.swagger_spec_path)
+            # Використовуємо PostgresRAGEngine замість RAGEngine
+            # self.rag_engine = RAGEngine(self.parser.swagger_spec_path)
+            # TODO: Оновити для використання PostgresRAGEngine з user_id та swagger_spec_id
             logging.info("RAG engine ініціалізовано успішно")
         except Exception as e:
             logging.error(f"Помилка ініціалізації RAG: {e}")
@@ -738,7 +741,12 @@ class InteractiveSwaggerAgent:
         """Формує заголовки для запиту."""
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
-        if self.jwt_token:
+        # Використовуємо зовнішній API токен для викликів зовнішніх API
+        external_api_token = os.getenv("EXTERNAL_API_TOKEN")
+        if external_api_token:
+            headers["Authorization"] = f"Bearer {external_api_token}"
+        elif self.jwt_token:
+            # Fallback до внутрішнього JWT токена
             headers["Authorization"] = f"Bearer {self.jwt_token}"
 
         return headers

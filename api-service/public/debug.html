@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Widget</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .debug { background: #f0f0f0; padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Debug AI Widget</h1>
+
+    <div class="debug">
+        <h3>Тест API:</h3>
+        <button onclick="testAPI()">Тестувати API</button>
+        <div id="apiResult"></div>
+    </div>
+
+    <div class="debug">
+        <h3>Тест віджета:</h3>
+        <button onclick="testWidget()">Тестувати віджет</button>
+        <div id="widgetResult"></div>
+    </div>
+
+    <div class="debug">
+        <h3>Логи:</h3>
+        <div id="logs"></div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = `debug ${type}`;
+            div.textContent = `${new Date().toLocaleTimeString()}: ${message}`;
+            logs.appendChild(div);
+        }
+
+        async function testAPI() {
+            const result = document.getElementById('apiResult');
+            result.innerHTML = 'Тестування...';
+
+            try {
+                const response = await fetch('http://localhost:5050/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: 'Тест повідомлення',
+                        api_spec_url: 'test'
+                    })
+                });
+
+                const data = await response.json();
+                result.innerHTML = `<div class="success">✅ API працює: ${JSON.stringify(data)}</div>`;
+                log('API тест успішний', 'success');
+            } catch (error) {
+                result.innerHTML = `<div class="error">❌ API помилка: ${error.message}</div>`;
+                log(`API помилка: ${error.message}`, 'error');
+            }
+        }
+
+        function testWidget() {
+            const result = document.getElementById('widgetResult');
+
+            // Перевіряємо чи завантажений віджет
+            if (typeof window.aiWidgetInstance !== 'undefined') {
+                result.innerHTML = '<div class="success">✅ Віджет завантажений</div>';
+                log('Віджет завантажений', 'success');
+            } else {
+                result.innerHTML = '<div class="error">❌ Віджет не завантажений</div>';
+                log('Віджет не завантажений', 'error');
+            }
+        }
+
+        // Логуємо події
+        window.addEventListener('load', () => {
+            log('Сторінка завантажена');
+        });
+
+        window.addEventListener('error', (e) => {
+            log(`JavaScript помилка: ${e.message}`, 'error');
+        });
+
+        // Тестуємо API при завантаженні
+        window.addEventListener('load', () => {
+            setTimeout(testAPI, 1000);
+        });
+    </script>
+
+    <!-- Вбудовуємо віджет -->
+    <script>
+        window.AIWidgetConfig = {
+            apiUrl: 'http://localhost:5050',
+            position: 'bottom-right',
+            title: 'AI Асистент',
+            subtitle: 'Debug режим'
+        };
+    </script>
+    <script src="http://localhost:5050/embed.js"></script>
+</body>
+</html>

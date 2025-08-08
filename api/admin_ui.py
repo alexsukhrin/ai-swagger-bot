@@ -19,10 +19,10 @@ from .models import APICall, ChatMessage, ChatSession, PromptTemplate, SwaggerSp
 admin_app = FastAPI(title="AI Swagger Bot Admin", docs_url=None, redoc_url=None)
 
 # Налаштування шаблонів
-templates = Jinja2Templates(directory="api/templates")
+templates = Jinja2Templates(directory="templates")
 
-# Статичні файли
-admin_app.mount("/static", StaticFiles(directory="api/static"), name="static")
+# Статичні файли (тимчасово вимкнено)
+# admin_app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @admin_app.get("/", response_class=HTMLResponse)

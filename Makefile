@@ -20,6 +20,11 @@ else
 	ACTIVATE = conda activate ai-swagger
 endif
 
+# CLI Тестер команди
+CLI_TESTER = $(PYTHON_VENV) cli_tester.py
+INTERACTIVE_CLI = $(PYTHON_VENV) interactive_cli.py
+QUICK_TEST = $(PYTHON_VENV) quick_test.py
+
 help: ## Показати довідку
 	@echo "AI Swagger Bot - Доступні команди:"
 	@echo ""
@@ -36,13 +41,17 @@ install-dev: ## Встановити проект з dev залежностям�
 	cp env_example.txt .env
 	@echo "✅ Встановлення завершено!"
 
-test: ## Запустити тести
-	@echo "🧪 Запуск тестів..."
-	PYTHONPATH=src:$(PYTHONPATH) $(PYTHON_VENV) -m pytest tests/ -v
+test: ## Run all tests
+	python -m pytest tests/ -v --tb=short
 
-test-coverage: ## Запустити тести з покриттям
-	@echo "📊 Запуск тестів з покриттям..."
-	PYTHONPATH=src:$(PYTHONPATH) $(PYTHON_VENV) -m pytest tests/ -v --cov=src --cov-report=xml --cov-report=html --cov-report=term-missing
+test-fast: ## Run tests quickly (without slow tests)
+	python -m pytest tests/ -v --tb=short -m "not slow"
+
+test-coverage: ## Run tests with coverage
+	python -m pytest tests/ -v --tb=short --cov=src --cov-report=html
+
+test-clean: ## Clear pytest cache and run tests
+	python -m pytest tests/ -v --tb=short --cache-clear
 
 run: ## Запустити Streamlit додаток
 	@echo "🌐 Запуск Streamlit додатку..."
@@ -59,6 +68,99 @@ create-admin: ## Створити адміністратора
 run-cli: ## Запустити CLI інтерфейс
 	@echo "💻 Запуск CLI інтерфейсу..."
 	$(PYTHON_VENV) cli.py --swagger examples/swagger_specs/shop_api.json
+
+# CLI Тестер команди
+cli-test: ## Запустити CLI тестер (командний режим)
+	@echo "🔧 Запуск CLI тестера..."
+	$(CLI_TESTER) health
+
+cli-interactive: ## Запустити інтерактивний CLI тестер
+	@echo "🎮 Запуск інтерактивного CLI тестера..."
+	$(INTERACTIVE_CLI)
+
+cli-quick: ## Запустити швидкий тест CLI
+	@echo "⚡ Запуск швидкого тесту CLI..."
+	$(QUICK_TEST)
+
+cli-health: ## Health check через CLI
+	@echo "🏥 Health check через CLI..."
+	$(CLI_TESTER) health
+
+cli-demo-user: ## Створити демо користувача через CLI
+	@echo "👤 Створення демо користувача через CLI..."
+	$(CLI_TESTER) demo-user
+
+cli-upload-swagger: ## Завантажити Swagger через CLI
+	@echo "📁 Завантаження Swagger через CLI..."
+	$(CLI_TESTER) upload-swagger --file examples/swagger_specs/shop_api.json
+
+cli-chat: ## Чат з AI через CLI
+	@echo "💬 Чат з AI через CLI..."
+	$(CLI_TESTER) chat --message "Покажи всі доступні endpoints"
+
+cli-prompts: ## Перегляд промптів через CLI
+	@echo "📝 Перегляд промптів через CLI..."
+	$(CLI_TESTER) prompts
+
+cli-create-prompt: ## Створити кастомний промпт через CLI
+	@echo "✨ Створення кастомного промпту через CLI..."
+	$(CLI_TESTER) create-prompt --name "Мій промпт" --description "Опис" --template "Ти експерт {user_query}" --category user_defined
+
+cli-search-prompts: ## Пошук промптів через CLI
+	@echo "🔍 Пошук промптів через CLI..."
+	$(CLI_TESTER) search-prompts --query "створення"
+
+cli-export-prompts: ## Експорт промптів через CLI
+	@echo "📤 Експорт промптів через CLI..."
+	$(CLI_TESTER) export-prompts --include-custom
+
+cli-full-test: ## Повний цикл тестування через CLI
+	@echo "🚀 Повний цикл тестування через CLI..."
+	$(MAKE) cli-health
+	$(MAKE) cli-demo-user
+	$(MAKE) cli-upload-swagger
+	$(MAKE) cli-chat
+	$(MAKE) cli-prompts
+	$(MAKE) cli-create-prompt
+	$(MAKE) cli-search-prompts
+	$(MAKE) cli-export-prompts
+	@echo "✅ Повний цикл тестування завершено!"
+
+cli-help: ## Довідка по CLI командам
+	@echo "🔧 CLI Тестер - Доступні команди:"
+	@echo ""
+	@echo "🏥 Health Check:"
+	@echo "  make cli-health"
+	@echo ""
+	@echo "👤 Демо користувач:"
+	@echo "  make cli-demo-user"
+	@echo ""
+	@echo "📁 Завантаження Swagger:"
+	@echo "  make cli-upload-swagger"
+	@echo ""
+	@echo "💬 Чат з AI:"
+	@echo "  make cli-chat"
+	@echo ""
+	@echo "📝 Промпти:"
+	@echo "  make cli-prompts"
+	@echo ""
+	@echo "✨ Створення промпту:"
+	@echo "  make cli-create-prompt"
+	@echo ""
+	@echo "🔍 Пошук промптів:"
+	@echo "  make cli-search-prompts"
+	@echo ""
+	@echo "📤 Експорт промптів:"
+	@echo "  make cli-export-prompts"
+	@echo ""
+	@echo "🎮 Інтерактивний режим:"
+	@echo "  make cli-interactive"
+	@echo ""
+	@echo "⚡ Швидкий тест:"
+	@echo "  make cli-quick"
+	@echo ""
+	@echo "🚀 Повний цикл:"
+	@echo "  make cli-full-test"
 
 run-examples: ## Запустити приклади
 	@echo "📝 Запуск прикладів..."
@@ -123,7 +225,27 @@ docker-compose-test: ## Тестувати з Docker Compose
 	@echo "🐳 Тестування з Docker Compose..."
 	docker-compose -f docker-compose.test.yml run --rm test
 	docker-compose -f docker-compose.test.yml run --rm lint
-	docker-compose -f docker-compose.test.yml run --rm security
+
+docker-up: ## Запустити проект з Docker Compose
+	@echo "🚀 Запуск проекту з Docker Compose..."
+	docker-compose up -d
+
+docker-down: ## Зупинити проект
+	@echo "🛑 Зупинка проекту..."
+	docker-compose down
+
+docker-logs: ## Показати логи
+	@echo "📋 Логи проекту..."
+	docker-compose logs -f
+
+docker-rebuild: ## Перебудувати та запустити проект
+	@echo "🔨 Перебудування та запуск проекту..."
+	docker-compose down
+	docker-compose up --build -d
+
+docker-status: ## Статус сервісів
+	@echo "📊 Статус сервісів..."
+	docker-compose ps
 
 pre-commit-install: ## Встановити pre-commit hooks
 	@echo "🔧 Встановлення pre-commit hooks..."
