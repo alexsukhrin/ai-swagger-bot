@@ -1,0 +1,156 @@
+services:
+  # PostgreSQL Database для інтеграційних тестів
+  test-db:
+    image: pgvector/pgvector:pg15
+    container_name: ai-swagger-bot-test-db
+    environment:
+      - POSTGRES_DB=ai_swagger_bot_test
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"  # Інший порт щоб не конфліктувати з основною БД
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Service для тестування
+  test-api-service:
+    build: ./api-service
+    container_name: ai-swagger-bot-test-api-service
+    ports:
+      - "5051:3030"  # Інший порт
+    environment:
+      - NODE_ENV=test
+      - PORT=3030
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Інтеграційні тести
+  integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-swagger-bot-integration-tests
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test-key}
+      - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/ai_swagger_bot_test
+      - USE_PGVECTOR=true
+      - API_SERVICE_URL=http://test-api-service:3030
+      - TESTING=true
+    volumes:
+      - ./tests:/app/tests
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./examples:/app/examples
+      - ./logs:/app/logs
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-api-service:
+        condition: service_healthy
+    command: |
+      sh -c "
+        echo 'Waiting for database to be ready...' &&
+        sleep 10 &&
+        echo 'Running database integration tests...' &&
+        python -m pytest tests/test_database_integration.py -v --tb=short --cov=api --cov-report=term-missing
+      "
+
+  # Тести продуктивності бази даних
+  performance-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-swagger-bot-performance-tests
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test-key}
+      - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/ai_swagger_bot_test
+      - USE_PGVECTOR=true
+      - TESTING=true
+    volumes:
+      - ./tests:/app/tests
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./logs:/app/logs
+    depends_on:
+      test-db:
+        condition: service_healthy
+    command: |
+      sh -c "
+        echo 'Running database performance tests...' &&
+        python -m pytest tests/test_database_integration.py::TestDatabaseIntegration::test_query_performance -v --tb=short
+      "
+
+  # Тести API інтеграції
+  api-integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-swagger-bot-api-integration-tests
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test-key}
+      - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/ai_swagger_bot_test
+      - USE_PGVECTOR=true
+      - API_SERVICE_URL=http://test-api-service:3030
+      - TESTING=true
+    volumes:
+      - ./tests:/app/tests
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./logs:/app/logs
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-api-service:
+        condition: service_healthy
+    command: |
+      sh -c "
+        echo 'Running API integration tests...' &&
+        python -m pytest tests/test_database_integration.py::TestDatabaseAPI -v --tb=short --cov=api --cov-report=term-missing
+      "
+
+  # Повні інтеграційні тести
+  full-integration-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-swagger-bot-full-integration-tests
+    environment:
+      - PYTHONPATH=/app
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-sk-test-key}
+      - DATABASE_URL=postgresql://postgres:postgres@test-db:5432/ai_swagger_bot_test
+      - USE_PGVECTOR=true
+      - API_SERVICE_URL=http://test-api-service:3030
+      - TESTING=true
+    volumes:
+      - ./tests:/app/tests
+      - ./api:/app/api
+      - ./src:/app/src
+      - ./examples:/app/examples
+      - ./logs:/app/logs
+    depends_on:
+      test-db:
+        condition: service_healthy
+      test-api-service:
+        condition: service_healthy
+    command: |
+      sh -c "
+        echo 'Running full integration test suite...' &&
+        python -m pytest tests/test_database_integration.py -v --tb=short --cov=api --cov-report=html --cov-report=term-missing
+      "
+
+volumes:
+  test_postgres_data:

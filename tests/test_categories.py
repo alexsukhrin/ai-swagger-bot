@@ -21,11 +21,11 @@ def test_category_search():
     print("=" * 40)
 
     try:
-        from rag_engine import RAGEngine
+        from rag_engine import PostgresRAGEngine
 
         # Ініціалізуємо RAG engine
-        rag = RAGEngine("examples/swagger_specs/shop_api.json")
-
+        # TODO: Оновити для використання PostgresRAGEngine з user_id та swagger_spec_id
+        # rag = PostgresRAGEngine(user_id="test_user", swagger_spec_id="test_swagger")
         # Тестуємо різні запити для категорій
         test_queries = [
             "category",

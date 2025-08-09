@@ -27,21 +27,3 @@ repos:
     hooks:
       - id: isort
         args: [--profile=black, --line-length=100]
-
-# Removed ruff hooks - using only black and isort for formatting
-
-# Removed mypy hook - using only black, isort, and bandit
-
-# Removed bandit hook - using only black and isort for formatting
-
-  - repo: local
-    hooks:
-      - id: pytest
-        name: pytest
-        entry: pytest
-        language: system
-        pass_filenames: false
-        always_run: true
-        args: [tests/, -v, --tb=short]
-        env:
-          PYTHONPATH: src

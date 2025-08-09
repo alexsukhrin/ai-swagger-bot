@@ -1,34 +1,67 @@
-version: '3.8'
-
 services:
-  ai-swagger-bot:
+  # FastAPI Backend Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: ai-swagger-bot-api
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - JWT_TOKEN=${JWT_TOKEN:-}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
+      - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_swagger_bot
+      - USE_PGVECTOR=true
+      - API_SERVICE_URL=${API_SERVICE_URL:-http://0.0.0.0:5050}
+      - ENABLE_API_CALLS=true
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./examples/swagger_specs:/app/examples/swagger_specs
+    depends_on:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Streamlit Frontend Service
+  frontend:
     build: .
-    container_name: ai-swagger-bot
+    container_name: ai-swagger-bot-frontend
     ports:
       - "8501:8501"
     environment:
-      # OpenAI API ключ (обов'язковий)
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      # JWT токен (опціональний)
       - JWT_TOKEN=${JWT_TOKEN:-}
-      # Додаткові налаштування
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
       - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      # Streamlit налаштування
+      - USE_PGVECTOR=true
+      - API_BASE_URL=http://api:8000
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_SERVER_ENABLE_CORS=false
       - STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
+      - ENABLE_API_CALLS=true
+    env_file:
+      - .env
     volumes:
-      # Зберігаємо chroma_db між перезапусками
-      - ./chroma_db:/app/chroma_db
-      # Зберігаємо логи
       - ./logs:/app/logs
-      # Можна підключити власні Swagger файли
       - ./examples/swagger_specs:/app/examples/swagger_specs
+    depends_on:
+      api:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
@@ -36,3 +69,42 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # API Service (External API that bot will call)
+  api-service:
+    build: ./api-service
+    container_name: ai-swagger-bot-api-service
+    ports:
+      - "5050:3030"
+    environment:
+      - NODE_ENV=development
+      - PORT=3030
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # PostgreSQL Database
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: ai-swagger-bot-db
+    environment:
+      - POSTGRES_DB=ai_swagger_bot
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

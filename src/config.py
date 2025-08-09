@@ -16,19 +16,24 @@ class Config:
 
     # API налаштування
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5-full")
+    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4")
     OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0"))
 
     # JWT налаштування
     JWT_TOKEN = os.getenv("JWT_TOKEN")
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "ai_swagger_bot_secret_key_2024")
 
     # Swagger налаштування
     SWAGGER_SPEC_PATH = os.getenv("SWAGGER_SPEC_PATH", "examples/swagger_specs/shop_api.json")
     BASE_URL = os.getenv("BASE_URL", "https://db62d2b2c3a5.ngrok-free.app/api")
 
     # База даних налаштування
-    CHROMA_DB_PATH = os.getenv("CHROMA_DB_PATH", "./temp_chroma_db")
-    PROMPTS_DB_PATH = os.getenv("PROMPTS_DB_PATH", "prompts.db")
+    DATABASE_URL = os.getenv(
+        "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/ai_swagger_bot"
+    )
+
+    # RAG налаштування (тільки PostgreSQL)
+    USE_PGVECTOR = True
 
     # Логування
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
@@ -45,39 +50,26 @@ class Config:
 
     # Історія розмов
     CONVERSATION_HISTORY_DIR = os.getenv("CONVERSATION_HISTORY_DIR", "./conversation_history")
-    MAX_HISTORY_MESSAGES = int(os.getenv("MAX_HISTORY_MESSAGES", "50"))
+
+    # Налаштування для очищення дублікатів
+    CLEANUP_DUPLICATES_ON_STARTUP = (
+        os.getenv("CLEANUP_DUPLICATES_ON_STARTUP", "false").lower() == "true"
+    )
 
     @classmethod
-    def validate(cls) -> bool:
-        """Валідує конфігурацію."""
-        if not cls.OPENAI_API_KEY:
-            print("❌ OPENAI_API_KEY не знайдено в змінних середовища")
-            return False
-
-        if not os.path.exists(cls.SWAGGER_SPEC_PATH):
-            print(f"❌ Swagger файл не знайдено: {cls.SWAGGER_SPEC_PATH}")
-            return False
-
-        print("✅ Конфігурація валідна")
-        return True
-
-    @classmethod
-    def get_rag_config(cls) -> Dict[str, Any]:
-        """Повертає конфігурацію для RAG."""
+    def get_database_config(cls) -> Dict[str, Any]:
+        """Отримує конфігурацію бази даних."""
         return {
-            "chunk_size": cls.CHUNK_SIZE,
-            "chunk_overlap": cls.CHUNK_OVERLAP,
-            "search_k": cls.SEARCH_K_RESULTS,
-            "persist_directory": cls.CHROMA_DB_PATH,
+            "database_url": cls.DATABASE_URL,
+            "use_pgvector": cls.USE_PGVECTOR,
         }
 
     @classmethod
-    def get_agent_config(cls) -> Dict[str, Any]:
-        """Повертає конфігурацію для агентів."""
+    def get_rag_config(cls) -> Dict[str, Any]:
+        """Отримує конфігурацію RAG."""
         return {
-            "openai_api_key": cls.OPENAI_API_KEY,
-            "model": cls.OPENAI_MODEL,
-            "temperature": cls.OPENAI_TEMPERATURE,
-            "jwt_token": cls.JWT_TOKEN,
-            "base_url": cls.BASE_URL,
+            "chunk_size": cls.CHUNK_SIZE,
+            "chunk_overlap": cls.CHUNK_OVERLAP,
+            "search_k_results": cls.SEARCH_K_RESULTS,
+            "use_pgvector": cls.USE_PGVECTOR,
         }

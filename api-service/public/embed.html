@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Swagger Bot Widget - Інструкції вбудовування</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e1e5e9;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+
+        .section h2 {
+            color: #667eea;
+            margin-top: 0;
+        }
+
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .highlight {
+            background: #667eea;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+
+        .example {
+            background: #f0f8ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 15px 0;
+        }
+
+        .demo-button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 0;
+        }
+
+        .demo-button:hover {
+            background: #5a6fd8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Swagger Bot Widget</h1>
+        <p style="text-align: center; color: #666; margin-bottom: 30px;">
+            Легкий віджет для вбудовування на будь-який сайт
+        </p>
+
+        <div class="section">
+            <h2>🚀 Швидке вбудовування</h2>
+            <p>Додайте цей код в секцію <code>&lt;head&gt;</code> вашого сайту:</p>
+
+            <div class="code-block">
+&lt;script src="http://localhost:3031/widget.js"&gt;&lt;/script&gt;
+            </div>
+
+            <p>Віджет автоматично з'явиться в правому нижньому куті сторінки.</p>
+        </div>
+
+        <div class="section">
+            <h2>⚙️ Налаштування</h2>
+            <p>Для налаштування віджету додайте конфігурацію:</p>
+
+            <div class="code-block">
+&lt;script&gt;
+window.AIWidgetConfig = {
+    apiUrl: 'http://localhost:3031', // URL вашого API
+    position: 'bottom-right', // Позиція: bottom-right, bottom-left, top-right, top-left
+    theme: 'default', // Тема: default, dark, light
+    language: 'uk' // Мова: uk, en
+};
+&lt;/script&gt;
+&lt;script src="http://localhost:3031/widget.js"&gt;&lt;/script&gt;
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Приклади використання</h2>
+
+            <div class="example">
+                <h3>Базовий приклад</h3>
+                <div class="code-block">
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Мій сайт&lt;/title&gt;
+    &lt;script src="http://localhost:3031/widget.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Вітаю на моєму сайті!&lt;/h1&gt;
+    &lt;p&gt;AI Bot з'явиться автоматично&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+                </div>
+            </div>
+
+            <div class="example">
+                <h3>З налаштуваннями</h3>
+                <div class="code-block">
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Мій сайт&lt;/title&gt;
+    &lt;script&gt;
+        window.AIWidgetConfig = {
+            apiUrl: 'http://localhost:3031',
+            position: 'bottom-left',
+            theme: 'dark',
+            language: 'uk'
+        };
+    &lt;/script&gt;
+    &lt;script src="http://localhost:3031/widget.js"&gt;&lt;/script&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Вітаю на моєму сайті!&lt;/h1&gt;
+    &lt;p&gt;AI Bot з'явиться в лівому нижньому куті&lt;/p&gt;
+&lt;/body&gt;
+&lt;/html&gt;
+                </div>
+            </div>
+
+            <div class="example">
+                <h3>Програмне керування</h3>
+                <div class="code-block">
+&lt;script&gt;
+// Показати віджет
+window.aiWidgetInstance.show();
+
+// Приховати віджет
+window.aiWidgetInstance.hide();
+
+// Знищити віджет
+window.aiWidgetInstance.destroy();
+
+// Створити новий екземпляр
+const widget = new AIWidget({
+    apiUrl: 'http://localhost:3031',
+    position: 'top-right'
+});
+&lt;/script&gt;
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔧 API Endpoints</h2>
+            <p>Віджет використовує наступні API endpoints:</p>
+
+            <div class="code-block">
+POST /api/chat
+{
+    "message": "Ваше повідомлення",
+    "api_spec_url": "URL до Swagger специфікації"
+}
+            </div>
+
+            <p>Відповідь:</p>
+            <div class="code-block">
+{
+    "id": 1234567890,
+    "message": "Відповідь AI бота",
+    "timestamp": "2024-01-01T12:00:00.000Z",
+    "type": "bot"
+}
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎨 Кастомізація</h2>
+            <p>Ви можете змінити стилі віджету, додавши CSS:</p>
+
+            <div class="code-block">
+&lt;style&gt;
+.ai-widget {
+    /* Ваші стилі */
+    border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.ai-widget-header {
+    background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+}
+&lt;/style&gt;
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📱 Responsive дизайн</h2>
+            <p>Віджет автоматично адаптується до мобільних пристроїв:</p>
+            <ul>
+                <li>На мобільних пристроях віджет займає майже весь екран</li>
+                <li>Адаптивні стилі вже включені</li>
+                <li>Підтримка touch-жестів</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🔒 Безпека</h2>
+            <p>Рекомендації для продакшену:</p>
+            <ul>
+                <li>Використовуйте HTTPS для API</li>
+                <li>Налаштуйте CORS для ваших доменів</li>
+                <li>Додайте аутентифікацію якщо потрібно</li>
+                <li>Обмежте rate limiting</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🧪 Тестування</h2>
+            <button class="demo-button" onclick="testWidget()">Тестувати віджет</button>
+            <button class="demo-button" onclick="toggleWidget()">Показати/Приховати</button>
+            <button class="demo-button" onclick="destroyWidget()">Видалити віджет</button>
+        </div>
+
+        <div class="section">
+            <h2>📞 Підтримка</h2>
+            <p>Якщо у вас виникли питання:</p>
+            <ul>
+                <li>Перевірте, чи запущений API сервер на порту 3031</li>
+                <li>Перевірте консоль браузера на наявність помилок</li>
+                <li>Переконайтеся, що CORS налаштований правильно</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function testWidget() {
+            if (!window.aiWidgetInstance) {
+                alert('Віджет ще не завантажений. Зачекайте кілька секунд.');
+                return;
+            }
+            window.aiWidgetInstance.show();
+            alert('Віджет активовано!');
+        }
+
+        function toggleWidget() {
+            if (!window.aiWidgetInstance) {
+                alert('Віджет ще не завантажений.');
+                return;
+            }
+            if (window.aiWidgetInstance.widget.style.display === 'none') {
+                window.aiWidgetInstance.show();
+            } else {
+                window.aiWidgetInstance.hide();
+            }
+        }
+
+        function destroyWidget() {
+            if (!window.aiWidgetInstance) {
+                alert('Віджет ще не завантажений.');
+                return;
+            }
+            window.aiWidgetInstance.destroy();
+            window.aiWidgetInstance = null;
+            alert('Віджет видалено!');
+        }
+
+        // Автоматичне завантаження віджету для демонстрації
+        setTimeout(() => {
+            if (!window.aiWidgetInstance) {
+                console.log('Завантаження демо віджету...');
+                const script = document.createElement('script');
+                script.src = 'http://localhost:3031/widget.js';
+                document.head.appendChild(script);
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

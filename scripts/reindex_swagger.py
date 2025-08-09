@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.enhanced_swagger_parser import EnhancedSwaggerParser
-from src.rag_engine import RAGEngine
+from src.rag_engine import PostgresRAGEngine
 
 
 def reindex_swagger_files():
@@ -47,7 +47,7 @@ def reindex_swagger_files():
             parser = EnhancedSwaggerParser(str(swagger_file))
 
             # Створюємо RAG двигун для конкретного файлу
-            rag_engine = RAGEngine(str(swagger_file))
+            rag_engine = PostgresRAGEngine(user_id="reindex_user", swagger_spec_id="reindex_spec")
 
             # Парсимо Swagger файл та створюємо chunks
             chunks = parser.create_enhanced_endpoint_chunks()

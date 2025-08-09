@@ -1,8 +1,11 @@
 # Environment variables
 .env
 .env.local
-.env.production
 .env.development
+.env.production
+.env.development.local
+.env.test.local
+.env.production.local
 
 # API Keys and Secrets
 *.key
@@ -51,6 +54,16 @@ venv.bak/
 *.swo
 *~
 
+# IDE specific files
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries/
+.idea/shelf/
+
 # OS
 .DS_Store
 .DS_Store?
@@ -59,6 +72,7 @@ venv.bak/
 .Trashes
 ehthumbs.db
 Thumbs.db
+desktop.ini
 
 # Logs
 *.log
@@ -69,11 +83,14 @@ logs/
 *.temp
 temp/
 tmp/
+cache/
+.cache/
 
 # Database
 *.db
 *.sqlite
 *.sqlite3
+postgres_data/
 
 # Vector stores
 vectorstore/
@@ -86,6 +103,35 @@ conversation_history/
 interactive_conversation_history/
 *.pkl
 *.pickle
+
+# Session files
+.cli_session.json
+.cli_session_*.json
+
+# Node.js (for api-service)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Testing and coverage
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.tox/
+.nox/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -129,19 +175,6 @@ dmypy.json
 
 # Cython debug symbols
 cython_debug/
-
-# Testing and coverage
-.coverage
-.coverage.*
-htmlcov/
-.pytest_cache/
-.tox/
-.nox/
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
 
 # Security reports
 bandit-report.json
