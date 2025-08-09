@@ -336,7 +336,7 @@ def load_base_prompts_from_yaml() -> List[Dict[str, Any]]:
                 "description": prompt_data.get("description", ""),
                 "template": prompt_data.get("template", ""),
                 "category": prompt_data.get("category", "general"),
-                "tags": prompt_data.get("tags", []),
+                # tags не используются в промптах
                 "is_public": True,
                 "is_active": True,
                 "usage_count": 0,
@@ -384,7 +384,7 @@ def create_user_with_base_prompts(user_data: Dict[str, Any], db: Session) -> Use
                 description=prompt_data["description"],
                 template=prompt_data["template"],
                 category=prompt_data["category"],
-                tags=prompt_data["tags"],
+                # tags поле отсутствует в модели PromptTemplate
                 is_public=False,  # Промпти користувача не публічні
                 is_active=True,
                 usage_count=0,
@@ -587,7 +587,7 @@ async def chat(
             else:
                 enhanced_message = request.message
 
-            response = agent.process_query(enhanced_message)
+            response = agent.process_interactive_query(enhanced_message)
 
         finally:
             # Видаляємо тимчасовий файл
