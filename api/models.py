@@ -161,8 +161,20 @@ class PromptTemplate(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Нові поля для GPT-генерованих промптів
+    swagger_spec_id = Column(
+        String(36), ForeignKey("swagger_specs.id", ondelete="CASCADE"), nullable=True
+    )
+    endpoint_path = Column(String(500), nullable=True)  # /api/users/{id}
+    http_method = Column(String(10), nullable=True)  # GET, POST, etc
+    resource_type = Column(String(100), nullable=True)  # users, orders, etc
+    tags = Column(JSON, nullable=True)  # ["user", "management", "api"]
+    source = Column(String(50), nullable=True, default="manual")  # manual, gpt_generated, imported
+    priority = Column(Integer, nullable=True, default=1)  # для сортування
+
     # Relationships
     user = relationship("User", back_populates="prompt_templates")
+    swagger_spec = relationship("SwaggerSpec", backref="prompt_templates")
 
     # Унікальний констрейнт для уникнення дублювання промптів
     __table_args__ = (
@@ -170,6 +182,9 @@ class PromptTemplate(Base):
         Index("idx_prompt_user_active", "user_id", "is_active"),
         Index("idx_prompt_category", "category"),
         Index("idx_prompt_public", "is_public"),
+        Index("idx_prompt_swagger_spec", "swagger_spec_id"),
+        Index("idx_prompt_endpoint", "endpoint_path", "http_method"),
+        Index("idx_prompt_source", "source"),
     )
 
 

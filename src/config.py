@@ -56,6 +56,20 @@ class Config:
         os.getenv("CLEANUP_DUPLICATES_ON_STARTUP", "false").lower() == "true"
     )
 
+    # Налаштування Auto Retry системи
+    AUTO_RETRY_ENABLED = os.getenv("AUTO_RETRY_ENABLED", "true").lower() == "true"
+    MAX_RETRY_ATTEMPTS = int(os.getenv("MAX_RETRY_ATTEMPTS", "3"))
+    RETRY_DELAY_SECONDS = float(os.getenv("RETRY_DELAY_SECONDS", "1.0"))
+
+    # Типи помилок для автоматичного retry - БІЛЬШ ОБЕРЕЖНО
+    RETRY_ON_STATUS_CODES = [422, 500, 502, 503, 504]  # Прибрали загальний 400
+    RETRY_ON_CONNECTION_ERRORS = True
+    RETRY_ON_TIMEOUT_ERRORS = True
+
+    # Специфічні помилки для retry (тільки коли точно знаємо що можна виправити)
+    RETRY_ON_MISSING_SLUG = True  # slug must be a string
+    RETRY_ON_MISSING_REQUIRED_FIELDS = True  # відсутні обов'язкові поля
+
     @classmethod
     def get_database_config(cls) -> Dict[str, Any]:
         """Отримує конфігурацію бази даних."""

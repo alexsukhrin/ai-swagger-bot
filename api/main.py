@@ -30,9 +30,7 @@ from .models import (
     ApiEmbedding,
     ChatMessage,
     ChatSession,
-)
-from .models import PromptTemplate as DBPromptTemplate
-from .models import (
+    PromptTemplate,
     SwaggerSpec,
     User,
 )
@@ -377,7 +375,7 @@ def create_user_with_base_prompts(user_data: Dict[str, Any], db: Session) -> Use
 
         for prompt_data in base_prompts:
             # Створюємо копію промпту для користувача
-            user_prompt = DBPromptTemplate(
+            user_prompt = PromptTemplate(
                 id=str(uuid.uuid4()),
                 user_id=user.id,  # Прив'язуємо до користувача
                 name=prompt_data["name"],
@@ -450,6 +448,10 @@ async def upload_swagger(
         parser = EnhancedSwaggerParser()
         parsed_data = parser.parse_swagger_spec(swagger_data)
 
+        # Витягуємо base_url зі Swagger файлу
+        parser.swagger_data = swagger_data  # Встановлюємо дані для отримання base_url
+        base_url = parser.get_base_url()
+
         # Перевіряємо вимоги токенів
         requires_tokens, token_requirements = check_swagger_token_requirements(swagger_data)
 
@@ -463,6 +465,7 @@ async def upload_swagger(
             filename=file.filename,
             original_data=swagger_data,
             parsed_data=parsed_data,
+            base_url=base_url,  # Зберігаємо base_url з Swagger файлу
             endpoints_count=len(parsed_data.get("endpoints", [])),
             is_active=True,
             created_at=datetime.now(),
@@ -495,12 +498,14 @@ async def upload_swagger(
                 logger.error(f"Помилка обробки токенів авторизації: {e}")
                 # Продовжуємо без токенів
 
-        # Додаємо завдання створення embeddings в чергу
-        task_id = queue_manager.add_task(current_user.id, swagger_id, swagger_data)
-        logger.info(f"📋 Додано завдання створення embeddings: {task_id}")
+        # Додаємо завдання створення embeddings в чергу з автоматичним GPT enhancement
+        task_id = queue_manager.add_task(
+            current_user.id, swagger_id, swagger_data, enable_gpt_enhancement=True
+        )
+        logger.info(f"📋 Додано завдання створення embeddings з GPT покращенням: {task_id}")
 
         # Формуємо повідомлення
-        message = "Swagger специфікація успішно завантажена. Embeddings створюються в фоні."
+        message = "Swagger специфікація успішно завантажена. ✨ Embeddings створюються з GPT покращенням в фоні."
         if created_tokens:
             message += f" Створено {len(created_tokens)} токенів."
 
@@ -569,6 +574,8 @@ async def chat(
                 enable_api_calls=True,  # Увімкнути API виклики
                 user_id=current_user.id,
                 swagger_spec_id=session.swagger_spec_id,
+                base_url_override=swagger_spec.base_url,  # Використовуємо base_url з бази даних
+                jwt_token=swagger_spec.jwt_token,  # Передаємо JWT токен зі специфікації
             )
 
             # Отримуємо контекст з RAG для конкретного користувача
@@ -607,14 +614,23 @@ async def chat(
             id=str(uuid.uuid4()),
             chat_session_id=session.id,
             role="assistant",
-            content=response,
+            content=(
+                response.get("response", str(response))
+                if isinstance(response, dict)
+                else str(response)
+            ),
             created_at=datetime.now(),
         )
         db.add(assistant_message)
         db.commit()
 
+        # Витягаємо текст відповіді з результату агента
+        response_text = (
+            response.get("response", str(response)) if isinstance(response, dict) else str(response)
+        )
+
         return ChatResponse(
-            response=response,
+            response=response_text,
             user_id=current_user.id,
             timestamp=datetime.now(),
             swagger_id=session.swagger_spec_id,
@@ -661,6 +677,41 @@ async def get_swagger_specs(
     )
     return [
         {"id": spec.id, "filename": spec.filename, "created_at": spec.created_at} for spec in specs
+    ]
+
+
+@app.get("/gpt-prompts")
+async def get_gpt_prompts(
+    swagger_spec_id: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Отримання GPT-генерованих промптів користувача."""
+    query = db.query(PromptTemplate).filter(
+        PromptTemplate.user_id == current_user.id,
+        PromptTemplate.source == "gpt_generated",
+        PromptTemplate.is_active == True,
+    )
+
+    if swagger_spec_id:
+        query = query.filter(PromptTemplate.swagger_spec_id == swagger_spec_id)
+
+    prompts = query.order_by(PromptTemplate.priority.desc(), PromptTemplate.created_at.desc()).all()
+
+    return [
+        {
+            "id": prompt.id,
+            "name": prompt.name,
+            "description": prompt.description,
+            "endpoint_path": prompt.endpoint_path,
+            "http_method": prompt.http_method,
+            "resource_type": prompt.resource_type,
+            "category": prompt.category,
+            "tags": prompt.tags,
+            "created_at": prompt.created_at,
+            "usage_count": prompt.usage_count,
+        }
+        for prompt in prompts
     ]
 
 

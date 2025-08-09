@@ -14,6 +14,9 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
+# Налаштовуємо logger
+logger = logging.getLogger(__name__)
+
 # Імпортуємо модулі
 try:
     from .enhanced_prompt_manager import EnhancedPromptManager
@@ -211,14 +214,19 @@ class InteractiveSwaggerAgent:
             logging.info(f"Обробка інтерактивного запиту для користувача {user_id}: {user_query}")
 
             # Перевіряємо чи це запит на створення об'єкта
-            if self._is_creation_request(user_query):
+            is_creation = self._is_creation_request(user_query)
+            logger.info(f"🏗️ Чи запит на створення: {is_creation}")
+            if is_creation:
+                logger.info("➡️ Перенаправляю на створення об'єкта")
                 return self._handle_creation_request(user_query, user_id)
 
             # Отримуємо контекст попередніх взаємодій
             context = self.conversation_history.get_recent_context(user_id)
 
             # Аналізуємо намір користувача
+            logger.info("🧠 Аналізую намір користувача")
             intent = self._analyze_user_intent(user_query, context)
+            logger.info(f"💡 Результат аналізу наміру: {intent}")
             if not intent:
                 response = self._generate_helpful_error_response(user_query)
                 self.conversation_history.add_interaction(
@@ -249,6 +257,20 @@ class InteractiveSwaggerAgent:
 
             logging.info(f"Знайдено {len(endpoints)} відповідних endpoints")
 
+            # Перевіряємо чи це інформаційний запит
+            if intent.get("is_informational", False) or intent.get("operation") == "INFO":
+                response = self._handle_informational_request(user_query, endpoints)
+                self.conversation_history.add_interaction(
+                    user_id,
+                    {
+                        "user_message": user_query,
+                        "bot_response": response,
+                        "status": "informational",
+                        "needs_followup": False,
+                    },
+                )
+                return {"response": response, "status": "informational", "needs_followup": False}
+
             # Формуємо API запит
             api_request = self._form_api_request(user_query, intent, endpoints)
             if not api_request:
@@ -278,8 +300,10 @@ class InteractiveSwaggerAgent:
                 )
                 return {"response": response, "status": "preview", "needs_followup": False}
 
-            # Виконуємо API виклик
-            api_response = self._call_api(api_request)
+            # Виконуємо API виклик з автоматичним retry
+            logger.info(f"🚀 Готовий до виконання API запиту: {api_request}")
+            api_response = self._call_api_with_retry(api_request, user_query, intent)
+            logger.info(f"📬 Отримано відповідь від API: {api_response}")
 
             # Аналізуємо відповідь сервера
             if self._is_server_error(api_response):
@@ -393,8 +417,10 @@ class InteractiveSwaggerAgent:
                 api_request, updated_intent
             )
 
-            # Повторно виконуємо API виклик
-            api_response = self._call_api(updated_api_request)
+            # Повторно виконуємо API виклик з автоматичним retry
+            api_response = self._call_api_with_retry(
+                updated_api_request, user_query, updated_intent
+            )
 
             if self._is_server_error(api_response):
                 # Ще одна помилка - генеруємо новий запит
@@ -456,10 +482,17 @@ class InteractiveSwaggerAgent:
         if not api_response:
             return True
 
+        # Перевіряємо справжні server errors (не auth помилки)
         if "error" in api_response:
             return True
 
         status_code = api_response.get("status_code", 200)
+
+        # 401/403 - це auth помилки, а не server errors
+        # Вони повинні оброблятися окремо
+        if status_code in [401, 403]:
+            return True  # Але все ж таки треба показати користувачу
+
         return status_code >= 400
 
     def _analyze_error_and_generate_followup(
@@ -471,6 +504,13 @@ class InteractiveSwaggerAgent:
     ) -> str:
         """Аналізує помилку сервера та генерує запит на додаткову інформацію."""
         try:
+            # Перевіряємо auth помилки спочатку
+            if "auth_error" in api_response:
+                auth_error = api_response.get("auth_error", "")
+                auth_details = api_response.get("auth_details", "")
+                return f"🔐 Помилка авторизації: {auth_error}\n\n{auth_details}\n\n💡 Додайте JWT токен для доступу до API."
+
+            # Потім перевіряємо загальні помилки
             error_message = api_response.get("error", "")
             error_details = api_response.get("details", "")
 
@@ -585,19 +625,41 @@ class InteractiveSwaggerAgent:
     def _analyze_user_intent(self, user_query: str, context: str = "") -> Optional[Dict[str, Any]]:
         """Аналізує намір користувача з урахуванням контексту."""
         try:
+            # Спочатку перевіряємо чи це інформаційний запит
+            query_lower = user_query.lower()
+            info_keywords = [
+                "покажи",
+                "показати",
+                "які є",
+                "що можна",
+                "endpoints",
+                "api",
+                "список endpoints",
+                "доступні операції",
+                "що я можу",
+                "які методи",
+                "документація",
+            ]
+
+            is_info_request = any(keyword in query_lower for keyword in info_keywords)
+
             system_prompt = f"""
             Ти - експерт з API. Аналізуй запит користувача та визначай:
-            1. Тип операції (GET, POST, PUT, DELETE)
-            2. Ресурс або endpoint
-            3. Параметри та дані
-            4. Мета або ціль запиту
+            1. Чи це інформаційний запит (показати endpoints, документацію) чи операційний (виконати дію)
+            2. Тип операції (GET, POST, PUT, DELETE) - тільки для операційних запитів
+            3. Ресурс або endpoint
+            4. Параметри та дані
+            5. Мета або ціль запиту
 
             Контекст попередніх взаємодій:
             {context}
 
+            ВАЖЛИВО: Якщо користувач просить показати endpoints, список операцій, або документацію - це інформаційний запит, НЕ операційний!
+
             Відповідай у форматі JSON:
             {{
-                "operation": "GET|POST|PUT|DELETE",
+                "is_informational": true/false,
+                "operation": "GET|POST|PUT|DELETE|INFO",
                 "resource": "назва ресурсу",
                 "parameters": {{"param1": "value1"}},
                 "data": {{"field1": "value1"}},
@@ -627,7 +689,9 @@ class InteractiveSwaggerAgent:
         """Формує API запит з детальною валідацією."""
         try:
             # Знаходимо найкращий endpoint
+            logger.info(f"🔍 Шукаю endpoint для intent: {intent}")
             best_endpoint = self._find_best_endpoint(intent, endpoints)
+            logger.info(f"🎯 Знайдено endpoint: {best_endpoint}")
             if not best_endpoint:
                 return None
 
@@ -639,8 +703,13 @@ class InteractiveSwaggerAgent:
             if not request_data:
                 return None
 
+            # Використовуємо endpoint_path з результатів пошуку (вже містить повний URL)
+            endpoint_url = best_endpoint.get(
+                "endpoint_path", f"{self.base_url}{endpoint_info['path']}"
+            )
+
             return {
-                "url": f"{self.base_url}{endpoint_info['path']}",
+                "url": endpoint_url,
                 "method": endpoint_info["method"],
                 "headers": self._get_headers(),
                 "data": request_data.get("data"),
@@ -655,12 +724,17 @@ class InteractiveSwaggerAgent:
     def _find_best_endpoint(
         self, intent: Dict[str, Any], endpoints: List[Dict[str, Any]]
     ) -> Optional[Dict[str, Any]]:
-        """Знаходить найкращий endpoint для запиту."""
+        """Знаходить найкращий endpoint для запиту з покращеною логікою."""
         target_method = intent.get("operation", "").upper()
         target_resource = intent.get("resource", "").lower()
+        user_intent = intent.get("intent", "").lower()
 
         best_score = 0
         best_endpoint = None
+
+        logger.info(
+            f"🔍 Пошук endpoint для: method={target_method}, resource={target_resource}, intent={user_intent}"
+        )
 
         for endpoint in endpoints:
             metadata = endpoint.get("metadata", {})
@@ -670,21 +744,45 @@ class InteractiveSwaggerAgent:
 
             score = 0
 
-            # Співпадіння методу
+            # Співпадіння методу (найважливіше)
             if method == target_method:
-                score += 3
+                score += 5
 
             # Співпадіння ресурсу в шляху
             if target_resource in path:
-                score += 2
+                score += 3
 
             # Співпадіння в описі
             if target_resource in summary:
-                score += 1
+                score += 2
+
+            # Покращена логіка для "всі" запитів
+            if any(
+                word in user_intent for word in ["всі", "all", "список", "показати", "отримати всі"]
+            ):
+                # Віддаємо перевагу endpoints без параметрів ID
+                if "{id}" not in path and "{" not in path:
+                    score += 4  # Бонус за відсутність параметрів
+                    logger.info(f"  ✅ Бонус за відсутність параметрів: {method} {path}")
+                elif "{id}" in path:
+                    score -= 2  # Штраф за наявність ID параметра
+                    logger.info(f"  ⚠️ Штраф за ID параметр: {method} {path}")
+
+            # Додаткові бонуси за ключові слова в summary
+            if any(word in summary for word in ["get all", "список", "всі", "отримати всі"]):
+                score += 2
+                logger.info(f"  ✅ Бонус за ключові слова в описі: {method} {path}")
+
+            logger.info(f"  📊 Endpoint: {method} {path} - score: {score}")
 
             if score > best_score:
                 best_score = score
                 best_endpoint = endpoint
+
+        if best_endpoint:
+            final_method = best_endpoint.get("metadata", {}).get("method", "")
+            final_path = best_endpoint.get("metadata", {}).get("path", "")
+            logger.info(f"🎯 Обраний endpoint: {final_method} {final_path} (score: {best_score})")
 
         return best_endpoint
 
@@ -694,18 +792,18 @@ class InteractiveSwaggerAgent:
 
         # Знаходимо повну інформацію про endpoint
         for ep in self.parser.get_endpoints():
-            if ep.method == metadata.get("method") and ep.path == metadata.get("path"):
+            if ep["method"] == metadata.get("method") and ep["path"] == metadata.get("path"):
                 return {
-                    "method": ep.method,
-                    "path": ep.path,
-                    "summary": ep.summary,
-                    "description": ep.description,
-                    "parameters": ep.parameters,
-                    "request_body": ep.request_body,
-                    "required_parameters": ep.required_parameters,
-                    "optional_parameters": ep.optional_parameters,
-                    "path_variables": ep.path_variables,
-                    "query_parameters": ep.query_parameters,
+                    "method": ep["method"],
+                    "path": ep["path"],
+                    "summary": ep.get("summary", ""),
+                    "description": ep.get("description", ""),
+                    "parameters": ep.get("parameters", []),
+                    "request_body": ep.get("request_body", {}),
+                    "required_parameters": ep.get("required_parameters", []),
+                    "optional_parameters": ep.get("optional_parameters", []),
+                    "path_variables": ep.get("path_variables", []),
+                    "query_parameters": ep.get("query_parameters", []),
                 }
 
         return metadata
@@ -740,9 +838,12 @@ class InteractiveSwaggerAgent:
                     if param_name in intent_params:
                         params[param_name] = intent_params[param_name]
 
-            # Request body
-            if endpoint_info.get("request_body") and intent_data:
-                request_data["data"] = intent_data
+            # Request body - додаємо дані для POST/PUT/PATCH запитів
+            if intent_data:
+                # Перевіряємо чи є request_body в endpoint_info або чи це POST/PUT/PATCH запит
+                method = endpoint_info.get("method", "").upper()
+                if endpoint_info.get("request_body") or method in ["POST", "PUT", "PATCH"]:
+                    request_data["data"] = intent_data
 
             return {"data": request_data.get("data"), "params": params}
 
@@ -817,6 +918,8 @@ class InteractiveSwaggerAgent:
             timeout = int(os.getenv("REQUEST_TIMEOUT", "30"))
             start_time = time.time()
 
+            logger.info(f"🌐 Виконую API запит: {api_request['method']} {api_request['url']}")
+
             response = requests.request(
                 method=api_request["method"],
                 url=api_request["url"],
@@ -835,15 +938,19 @@ class InteractiveSwaggerAgent:
                 "text": response.text,
             }
 
-            # Перевіряємо помилки авторизації
+            logger.info(
+                f"📊 API відповідь: status={response.status_code}, data={response.text[:100]}..."
+            )
+
+            # Перевіряємо помилки авторизації та додаємо деталі для кращого сповіщення
             if response.status_code == 401:
                 logger.warning("🔒 Помилка авторизації (401). Можливо потрібен JWT токен.")
-                api_response["error"] = "Unauthorized"
-                api_response["details"] = "Потрібна авторизація. Перевірте JWT токен."
+                api_response["auth_error"] = "Unauthorized"
+                api_response["auth_details"] = "Потрібна авторизація. Перевірте JWT токен."
             elif response.status_code == 403:
                 logger.warning("🚫 Доступ заборонено (403). Недостатньо прав.")
-                api_response["error"] = "Forbidden"
-                api_response["details"] = "Недостатньо прав для доступу до цього endpoint."
+                api_response["auth_error"] = "Forbidden"
+                api_response["auth_details"] = "Недостатньо прав для доступу до цього endpoint."
 
             # Записуємо API виклик в базу даних
             self._record_api_call(api_request, api_response, execution_time)
@@ -861,6 +968,14 @@ class InteractiveSwaggerAgent:
             error_response = {
                 "error": "Помилка з'єднання",
                 "details": "Не вдалося підключитися до сервера",
+            }
+            self._record_api_call(api_request, error_response, 0)
+            return error_response
+        except UnicodeEncodeError as e:
+            error_response = {
+                "error": "Помилка кодування",
+                "details": f"Неможливо закодувати символи: {str(e)}. Використовуйте тільки латинські символи для slug.",
+                "encoding_error": True,
             }
             self._record_api_call(api_request, error_response, 0)
             return error_response
@@ -930,6 +1045,226 @@ class InteractiveSwaggerAgent:
 
         except Exception as e:
             print(f"❌ Помилка запису API виклику: {e}")
+
+    def _call_api_with_retry(
+        self, api_request: Dict[str, Any], user_query: str = "", intent: Dict[str, Any] = None
+    ) -> Optional[Dict[str, Any]]:
+        """Виконує API виклик з автоматичним retry та GPT-виправленнями."""
+        import time
+
+        from src.config import Config
+
+        if not Config.AUTO_RETRY_ENABLED:
+            return self._call_api(api_request)
+
+        original_request = api_request.copy()
+        current_request = api_request.copy()
+
+        for attempt in range(1, Config.MAX_RETRY_ATTEMPTS + 1):
+            logger.info(
+                f"🔄 Спроба {attempt}/{Config.MAX_RETRY_ATTEMPTS}: {current_request['method']} {current_request['url']}"
+            )
+
+            # Виконуємо API виклик
+            api_response = self._call_api(current_request)
+
+            # Перевіряємо чи потрібен retry
+            if not self._should_retry(api_response, attempt, Config.MAX_RETRY_ATTEMPTS):
+                # Успішна відповідь або максимум спроб - повертаємо результат
+                if attempt > 1:
+                    logger.info(f"✅ Запит успішний після {attempt} спроб")
+                return api_response
+
+            if attempt < Config.MAX_RETRY_ATTEMPTS:
+                logger.warning(
+                    f"🔧 Спроба {attempt} не вдалась, аналізуємо помилку для автоматичного виправлення..."
+                )
+
+                # Отримуємо GPT-виправлення
+                fix_result = self._analyze_and_fix_with_gpt(
+                    original_request=original_request,
+                    current_request=current_request,
+                    api_response=api_response,
+                    user_query=user_query,
+                    attempt=attempt,
+                    max_attempts=Config.MAX_RETRY_ATTEMPTS,
+                )
+
+                if fix_result and fix_result.get("can_retry", False):
+                    # Застосовуємо виправлення
+                    current_request = fix_result.get("updated_request", current_request)
+                    logger.info(
+                        f"🛠️ Застосовуємо виправлення: {fix_result.get('analysis', 'Невідоме виправлення')}"
+                    )
+
+                    # Затримка перед наступною спробою
+                    if Config.RETRY_DELAY_SECONDS > 0:
+                        time.sleep(Config.RETRY_DELAY_SECONDS)
+                else:
+                    logger.warning(f"❌ GPT не може запропонувати виправлення, припиняємо retry")
+                    break
+
+        # Повертаємо останню відповідь
+        logger.warning(f"⚠️ Максимум спроб ({Config.MAX_RETRY_ATTEMPTS}) вичерпано")
+        return api_response
+
+    def _should_retry(
+        self, api_response: Dict[str, Any], current_attempt: int, max_attempts: int
+    ) -> bool:
+        """Визначає чи потрібен retry для цієї помилки."""
+        from src.config import Config
+
+        if not api_response or current_attempt >= max_attempts:
+            return False
+
+        # Перевіряємо connection errors
+        if "error" in api_response:
+            error_msg = api_response.get("error", "").lower()
+            if Config.RETRY_ON_CONNECTION_ERRORS and "з'єднання" in error_msg:
+                return True
+            if Config.RETRY_ON_TIMEOUT_ERRORS and "таймаут" in error_msg:
+                return True
+            if "кодування" in error_msg or api_response.get("encoding_error", False):
+                return True  # Retry на помилки кодування - GPT може виправити slug
+
+        # Перевіряємо HTTP status codes
+        status_code = api_response.get("status_code")
+        if status_code and status_code in Config.RETRY_ON_STATUS_CODES:
+            return True
+
+        # Специфічна перевірка для 400 помилок - тільки певні випадки
+        if status_code == 400:
+            error_message = str(api_response.get("data", {})).lower()
+
+            # Дозволяємо retry тільки для відомих виправних помилок
+            if Config.RETRY_ON_MISSING_SLUG and "slug must be a string" in error_message:
+                logger.info("🔧 Дозволено retry: відсутній slug")
+                return True
+
+            if Config.RETRY_ON_MISSING_REQUIRED_FIELDS and (
+                "required" in error_message or "missing" in error_message
+            ):
+                logger.info("🔧 Дозволено retry: відсутні обов'язкові поля")
+                return True
+
+            # Інші 400 помилки НЕ retry
+            logger.info(f"❌ 400 помилка НЕ для retry: {error_message[:100]}")
+            return False
+
+        return False
+
+    def _analyze_and_fix_with_gpt(
+        self,
+        original_request: Dict[str, Any],
+        current_request: Dict[str, Any],
+        api_response: Dict[str, Any],
+        user_query: str,
+        attempt: int,
+        max_attempts: int,
+    ) -> Optional[Dict[str, Any]]:
+        """Використовує GPT для аналізу помилки та пропозиції виправлень."""
+        try:
+            import json
+
+            from src.enhanced_prompt_manager import EnhancedPromptManager
+
+            # Отримуємо промпт для аналізу помилок з заповненими параметрами
+            prompt_manager = EnhancedPromptManager()
+
+            # Формуємо контекст для GPT
+            error_info = {
+                "user_query": user_query,
+                "original_request": json.dumps(original_request, ensure_ascii=False),
+                "current_request": json.dumps(current_request, ensure_ascii=False),
+                "api_error": str(api_response.get("error", api_response.get("data", {}))),
+                "status_code": api_response.get("status_code", "Unknown"),
+                "retry_attempt": attempt,
+                "max_retries": max_attempts,
+            }
+
+            # Вибираємо промпт залежно від типу помилки
+            if api_response.get("encoding_error", False) or "кодування" in str(
+                api_response.get("error", "")
+            ):
+                prompt_name = "encoding_error_fix"
+                # Для помилок кодування потрібен спеціальний контекст
+                error_info["error_details"] = api_response.get(
+                    "details", str(api_response.get("error", ""))
+                )
+            else:
+                prompt_name = "error_analysis_and_fix"
+
+            # Отримуємо відформатований промпт
+            filled_prompt = prompt_manager.get_prompt_by_name(prompt_name, **error_info)
+
+            if not filled_prompt or "Помилка завантаження промпту" in filled_prompt:
+                logger.error("❌ Не знайдено промпт для аналізу помилок")
+                return None
+
+            # Викликаємо GPT через LangChain
+            messages = [HumanMessage(content=filled_prompt)]
+            response = self.llm(messages)
+
+            if not response or not response.content:
+                logger.error("❌ GPT не надав відповіді для аналізу помилки")
+                return None
+
+            response_text = response.content
+
+            # Логуємо повну відповідь GPT для дебагу
+            logger.debug(f"🤖 Повна GPT відповідь: {response_text}")
+
+            # Парсимо JSON відповідь
+            import json
+
+            try:
+                # Спочатку пробуємо парсити всю відповідь як JSON
+                try:
+                    fix_result = json.loads(response_text.strip())
+                    logger.info(f"🤖 GPT аналіз: {fix_result.get('analysis', 'Аналіз відсутній')}")
+                    return fix_result
+                except json.JSONDecodeError:
+                    pass
+
+                # Якщо не вдалося, витягуємо JSON блок
+                json_start = response_text.find("{")
+                json_end = response_text.rfind("}") + 1
+                if json_start >= 0 and json_end > json_start:
+                    json_response = response_text[json_start:json_end]
+                    logger.debug(f"📝 Витягнутий JSON: {json_response}")
+
+                    # Пробуємо знайти правильний кінець JSON
+                    import re
+
+                    # Шукаємо перший валідний JSON об'єкт
+                    brace_count = 0
+                    valid_end = json_start
+                    for i, char in enumerate(response_text[json_start:], json_start):
+                        if char == "{":
+                            brace_count += 1
+                        elif char == "}":
+                            brace_count -= 1
+                            if brace_count == 0:
+                                valid_end = i + 1
+                                break
+
+                    json_response = response_text[json_start:valid_end]
+                    fix_result = json.loads(json_response)
+
+                    logger.info(f"🤖 GPT аналіз: {fix_result.get('analysis', 'Аналіз відсутній')}")
+                    return fix_result
+                else:
+                    logger.error("❌ Не знайдено JSON в відповіді GPT")
+                    return None
+
+            except json.JSONDecodeError as e:
+                logger.error(f"❌ Помилка парсингу JSON від GPT: {e}")
+                logger.debug(f"GPT відповідь: {response_text}")
+                return None
+
+        except Exception as e:
+            logger.error(f"❌ Помилка GPT аналізу: {e}")
+            return None
 
     def _format_response(
         self,
@@ -1032,6 +1367,12 @@ class InteractiveSwaggerAgent:
 
                 if response and not self._is_server_error(response):
                     # Успішне створення
+                    # Серіалізуємо відповідь з обробкою datetime
+                    try:
+                        response_json = self._serialize_response(response)
+                    except Exception:
+                        response_json = str(response)
+
                     success_message = f"""
 ✅ **Об'єкт успішно створено!**
 
@@ -1045,7 +1386,7 @@ class InteractiveSwaggerAgent:
 
 📊 **Відповідь сервера:**
 ```json
-{json.dumps(response, ensure_ascii=False, indent=2)}
+{response_json}
 ```
 """
                     return success_message
@@ -1185,20 +1526,28 @@ class InteractiveSwaggerAgent:
     def _is_creation_request(self, user_query: str) -> bool:
         """Визначає чи є запит на створення об'єкта."""
         query_lower = user_query.lower()
-        creation_keywords = [
-            "створи",
-            "create",
-            "додай",
-            "add",
-            "новий",
-            "new",
-            "категорію",
-            "category",
-            "товар",
-            "product",
-            "користувача",
-            "user",
+
+        # Перевіряємо чи це запит на перегляд/показ/отримання
+        view_keywords = [
+            "покажи",
+            "показати",
+            "отримати",
+            "список",
+            "всі",
+            "show",
+            "get",
+            "list",
+            "view",
+            "як отримати",
+            "як отримати список",
+            "endpoints для",
+            "endpoints",
         ]
+        if any(keyword in query_lower for keyword in view_keywords):
+            return False
+
+        # Тільки якщо є експліцитні дії створення
+        creation_keywords = ["створи", "create", "додай", "add", "новий", "new"]
         return any(keyword in query_lower for keyword in creation_keywords)
 
     def _handle_creation_request(self, user_query: str, user_id: str) -> Dict[str, Any]:
@@ -1333,7 +1682,7 @@ class InteractiveSwaggerAgent:
 
 📊 **Відповідь сервера:**
 ```json
-{json.dumps(api_response, ensure_ascii=False, indent=2)}
+{self._serialize_response(api_response)}
 ```
 """
 
@@ -1438,8 +1787,8 @@ class InteractiveSwaggerAgent:
             "api_info": self.api_info,
             "total_endpoints": len(endpoints),
             "total_schemas": len(schemas),
-            "methods": list(set(ep.method for ep in endpoints)),
-            "tags": list(set(tag for ep in endpoints for tag in ep.tags)),
+            "methods": list(set(ep["method"] for ep in endpoints)),
+            "tags": list(set(tag for ep in endpoints for tag in ep.get("tags", []))),
             "base_url": self.base_url,
         }
 
@@ -1454,3 +1803,400 @@ class InteractiveSwaggerAgent:
         file_path = self.conversation_history._get_user_file(user_id)
         if file_path.exists():
             file_path.unlink()
+
+    def _serialize_response(self, response: Any) -> str:
+        """Серіалізує відповідь з обробкою datetime об'єктів."""
+
+        def json_serializer(obj):
+            """Кастомний серіалізатор для datetime та інших об'єктів."""
+            if hasattr(obj, "isoformat"):
+                return obj.isoformat()
+            elif hasattr(obj, "__dict__"):
+                return str(obj)
+            else:
+                return str(obj)
+
+        return json.dumps(response, ensure_ascii=False, indent=2, default=json_serializer)
+
+    def _handle_informational_request(
+        self, user_query: str, endpoints: List[Dict[str, Any]]
+    ) -> str:
+        """Обробляє інформаційні запити про endpoints та API документацію."""
+        try:
+            if not endpoints:
+                return "❌ Не знайдено відповідних endpoints для вашого запиту."
+
+            query_lower = user_query.lower()
+
+            # Перевіряємо чи це запит про ВСІ endpoints
+            if any(
+                word in query_lower
+                for word in [
+                    "всі",
+                    "всі доступні",
+                    "all",
+                    "список",
+                    "покажи endpoints",
+                    "доступні endpoints",
+                ]
+            ):
+                return self._format_all_endpoints()  # Показуємо всі endpoints групами
+
+            # Перевіряємо чи це запит про конкретний endpoint з деталями
+            elif any(
+                word in query_lower
+                for word in ["детальна", "детально", "параметри", "як використати"]
+            ):
+                return self._format_detailed_endpoints(endpoints[:3])  # Показуємо детально перші 3
+            else:
+                return self._format_basic_endpoints(endpoints)  # Показуємо базовий список знайдених
+
+        except Exception as e:
+            logging.error(f"Помилка обробки інформаційного запиту: {e}")
+            return f"❌ Помилка при обробці інформаційного запиту: {str(e)}"
+
+    def _format_basic_endpoints(self, endpoints: List[Dict[str, Any]]) -> str:
+        """Форматує базовий список endpoints."""
+        response_parts = ["📚 **Доступні API Endpoints:**\n"]
+
+        for i, endpoint in enumerate(endpoints[:10], 1):  # Показуємо перші 10
+            metadata = endpoint.get("metadata", {})
+            method = metadata.get("method", "GET")
+            # Використовуємо full_url якщо є, інакше path
+            path = metadata.get("full_url", metadata.get("path", ""))
+            summary = metadata.get("summary", "")
+
+            response_parts.append(f"**{i}. {method} {path}**")
+            if summary:
+                response_parts.append(f"   📝 {summary}")
+            response_parts.append("")
+
+        if len(endpoints) > 10:
+            response_parts.append(f"... і ще {len(endpoints) - 10} endpoints")
+
+        response_parts.extend(
+            [
+                "\n💡 **Як використати:**",
+                '• Щоб виконати запит, напишіть: "Отримай всі товари" або "Створи нову категорію"',
+                '• Щоб дізнатися більше про конкретний endpoint, спитайте: "Детальна інформація про GET /products"',
+                '• Щоб отримати документацію з параметрами, напишіть: "Параметри для {назва endpoint}"',
+            ]
+        )
+
+        return "\n".join(response_parts)
+
+    def _format_detailed_endpoints(self, endpoints: List[Dict[str, Any]]) -> str:
+        """Форматує детальну інформацію про endpoints з параметрами та прикладами."""
+        response_parts = ["📖 **Детальна інформація про API Endpoints:**\n"]
+
+        for i, endpoint in enumerate(endpoints, 1):
+            # Отримуємо детальну інформацію про endpoint
+            endpoint_details = self._get_endpoint_details(endpoint)
+
+            metadata = endpoint.get("metadata", {})
+            method = metadata.get("method", "GET")
+            path = metadata.get("full_url", metadata.get("path", ""))
+            summary = metadata.get("summary", "")
+
+            response_parts.append(f"## {i}. {method} {path}")
+            if summary:
+                response_parts.append(f"**Опис:** {summary}")
+
+            # Додаємо інформацію про параметри
+            parameters_info = self._format_endpoint_parameters(endpoint_details, method, path)
+            if parameters_info:
+                response_parts.append(parameters_info)
+
+            # Додаємо приклади використання
+            examples = self._generate_usage_examples(endpoint_details, method, path)
+            if examples:
+                response_parts.append(examples)
+
+            response_parts.append("---\n")
+
+        return "\n".join(response_parts)
+
+    def _format_endpoint_parameters(
+        self, endpoint_details: Dict[str, Any], method: str, path: str
+    ) -> str:
+        """Форматує параметри endpoint'а з детальною інформацією."""
+        try:
+            parameters = endpoint_details.get("parameters", [])
+            if not parameters:
+                return ""
+
+            params_parts = ["\n**📋 Параметри:**"]
+
+            # Групуємо параметри за типом
+            query_params = []
+            path_params = []
+            header_params = []
+
+            for param in parameters:
+                param_type = param.get("in", "query")
+                if param_type == "query":
+                    query_params.append(param)
+                elif param_type == "path":
+                    path_params.append(param)
+                elif param_type == "header":
+                    header_params.append(param)
+
+            # Path параметри
+            if path_params:
+                params_parts.append("**🔗 Path параметри:**")
+                for param in path_params:
+                    name = param.get("name", "")
+                    description = param.get("description", "")
+                    required = "✅ обов'язковий" if param.get("required") else "⚪ опціональний"
+                    params_parts.append(f"  • `{name}` - {description} ({required})")
+                params_parts.append("")
+
+            # Query параметри (фільтри, пагінація тощо)
+            if query_params:
+                params_parts.append("**🔍 Query параметри (фільтри):**")
+                for param in query_params:
+                    name = param.get("name", "")
+                    description = param.get("description", "")
+                    required = "✅ обов'язковий" if param.get("required") else "⚪ опціональний"
+
+                    # Додаємо приклад використання з schema
+                    schema = param.get("schema", {})
+                    example = schema.get("example", "")
+                    param_type = schema.get("type", "")
+
+                    param_line = f"  • `{name}` ({param_type}) - {description} ({required})"
+                    if example:
+                        param_line += f"\n    💡 Приклад: `{name}={example}`"
+
+                    # Додаємо enum значення якщо є
+                    enum_values = schema.get("enum", [])
+                    if enum_values:
+                        param_line += (
+                            f"\n    🎯 Допустимі значення: {', '.join(map(str, enum_values))}"
+                        )
+
+                    params_parts.append(param_line)
+                params_parts.append("")
+
+            return "\n".join(params_parts)
+
+        except Exception as e:
+            logging.error(f"Помилка форматування параметрів: {e}")
+            return ""
+
+    def _generate_usage_examples(
+        self, endpoint_details: Dict[str, Any], method: str, path: str
+    ) -> str:
+        """Генерує приклади використання endpoint'а."""
+        try:
+            parameters = endpoint_details.get("parameters", [])
+            examples_parts = ["\n**💡 Приклади використання:**"]
+
+            # Базовий приклад
+            base_url = path.split("?")[0]  # Видаляємо query параметри якщо є
+            examples_parts.append(f"**Базовий запит:**")
+            examples_parts.append(f"```")
+            examples_parts.append(f"{method} {base_url}")
+            examples_parts.append(f"```")
+
+            # Приклади з параметрами
+            query_params = [p for p in parameters if p.get("in") == "query"]
+            if query_params:
+                examples_parts.append("\n**З параметрами:**")
+
+                # Приклад з пагінацією
+                pagination_example = self._generate_pagination_example(base_url, query_params)
+                if pagination_example:
+                    examples_parts.append(pagination_example)
+
+                # Приклад з фільтрами
+                filter_example = self._generate_filter_example(base_url, query_params)
+                if filter_example:
+                    examples_parts.append(filter_example)
+
+                # Приклад з сортуванням
+                sort_example = self._generate_sort_example(base_url, query_params)
+                if sort_example:
+                    examples_parts.append(sort_example)
+
+            # Розшифровка ключових фільтрів
+            filter_help = self._generate_filter_help(query_params)
+            if filter_help:
+                examples_parts.append(filter_help)
+
+            return "\n".join(examples_parts)
+
+        except Exception as e:
+            logging.error(f"Помилка генерації прикладів: {e}")
+            return ""
+
+    def _generate_pagination_example(self, base_url: str, query_params: List[Dict]) -> str:
+        """Генерує приклад з пагінацією."""
+        page_param = next((p for p in query_params if p.get("name") == "page"), None)
+        limit_param = next((p for p in query_params if p.get("name") == "limit"), None)
+
+        if page_param and limit_param:
+            return f"```\n{base_url}?page=1&limit=10  # Перша сторінка, 10 записів\n```"
+        return ""
+
+    def _generate_filter_example(self, base_url: str, query_params: List[Dict]) -> str:
+        """Генерує приклад з фільтрами."""
+        filters_param = next((p for p in query_params if p.get("name") == "filters"), None)
+        if filters_param:
+            schema = filters_param.get("schema", {})
+            example = schema.get("example", "")
+            if example:
+                return f"```\n{base_url}?filters={example}\n```"
+        return ""
+
+    def _generate_sort_example(self, base_url: str, query_params: List[Dict]) -> str:
+        """Генерує приклад з сортуванням."""
+        sort_by = next((p for p in query_params if p.get("name") == "sortBy"), None)
+        sort_order = next((p for p in query_params if p.get("name") == "sortOrder"), None)
+
+        if sort_by and sort_order:
+            sort_by_example = sort_by.get("schema", {}).get("example", "name")
+            sort_order_example = sort_order.get("schema", {}).get("example", "asc")
+            return f"```\n{base_url}?sortBy={sort_by_example}&sortOrder={sort_order_example}\n```"
+        return ""
+
+    def _generate_filter_help(self, query_params: List[Dict]) -> str:
+        """Генерує довідку по фільтрах."""
+        filters_param = next((p for p in query_params if p.get("name") == "filters"), None)
+        if not filters_param:
+            return ""
+
+        help_parts = ["\n**🔧 Довідка по фільтрах:**"]
+        help_parts.append("Фільтри передаються як JSON string з операторами:")
+        help_parts.append('• `{"name":{"like":"iPhone"}}` - пошук по частині назви')
+        help_parts.append('• `{"price":{"gte":100,"lte":1000}}` - ціна від 100 до 1000')
+        help_parts.append('• `{"status":{"eq":"active"}}` - точна відповідність')
+        help_parts.append('• `{"createdAt":{"gte":"2024-01-01"}}` - дата після 1 січня 2024')
+
+        return "\n".join(help_parts)
+
+    def _format_all_endpoints(self) -> str:
+        """Форматує всі доступні endpoints, згруповані за ресурсами."""
+        try:
+            # Отримуємо всі endpoints з парсера
+            all_endpoints = self.parser.get_endpoints()
+
+            if not all_endpoints:
+                return "❌ Не знайдено endpoints в API."
+
+            # Групуємо endpoints за тегами/ресурсами
+            grouped_endpoints = self._group_endpoints_by_resource(all_endpoints)
+
+            response_parts = ["📚 **Всі доступні API Endpoints:**\n"]
+
+            # Додаємо статистику
+            total_count = len(all_endpoints)
+            response_parts.append(f"**📊 Загальна статистика:** {total_count} endpoints\n")
+
+            # Показуємо по групах
+            for resource, endpoints in grouped_endpoints.items():
+                if not endpoints:
+                    continue
+
+                response_parts.append(f"### 🔸 {resource} ({len(endpoints)} endpoints)")
+
+                # Показуємо endpoints в групі
+                for endpoint in endpoints:
+                    method = endpoint.get("method", "GET")
+                    path = endpoint.get("path", "")
+                    summary = endpoint.get("summary", "")
+                    base_url = self.parser.get_base_url() or ""
+                    full_url = f"{base_url}{path}" if base_url else path
+
+                    endpoint_line = f"  • **{method}** `{full_url}`"
+                    if summary:
+                        endpoint_line += f" - {summary}"
+
+                    response_parts.append(endpoint_line)
+
+                response_parts.append("")  # Порожній рядок між групами
+
+            # Додаємо корисні поради
+            response_parts.extend(
+                [
+                    "---",
+                    "💡 **Як використати:**",
+                    '• Для деталей: "Детальна інформація про GET /products"',
+                    '• Для виконання: "Отримай всі товари" або "Створи нову категорію"',
+                    '• Для фільтрації: "Покажи endpoints для товарів"',
+                    "",
+                    "🔍 **Основні ресурси:**",
+                    "• **Products** - управління товарами",
+                    "• **Categories** - управління категоріями",
+                    "• **Orders** - управління замовленнями",
+                    "• **Brands** - управління брендами",
+                    "• **Collections** - управління колекціями",
+                ]
+            )
+
+            return "\n".join(response_parts)
+
+        except Exception as e:
+            logging.error(f"Помилка форматування всіх endpoints: {e}")
+            return f"❌ Помилка при отриманні всіх endpoints: {str(e)}"
+
+    def _group_endpoints_by_resource(
+        self, endpoints: List[Dict[str, Any]]
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Групує endpoints за ресурсами/тегами."""
+        grouped = {}
+
+        for endpoint in endpoints:
+            # Визначаємо ресурс за тегами або шляхом
+            tags = endpoint.get("tags", [])
+            if tags:
+                resource = tags[0]  # Беремо перший тег
+            else:
+                # Якщо немає тегів, визначаємо за шляхом
+                path = endpoint.get("path", "")
+                resource = self._extract_resource_from_path(path)
+
+            # Нормалізуємо назву ресурсу
+            resource = resource.capitalize() if resource else "Other"
+
+            if resource not in grouped:
+                grouped[resource] = []
+
+            grouped[resource].append(endpoint)
+
+        # Сортуємо групи за важливістю
+        priority_order = [
+            "Product",
+            "Category",
+            "Order",
+            "Brand",
+            "Collection",
+            "Setting",
+            "Family",
+            "Attribute",
+        ]
+        sorted_grouped = {}
+
+        # Спочатку додаємо пріоритетні групи
+        for resource in priority_order:
+            if resource in grouped:
+                sorted_grouped[resource] = grouped[resource]
+
+        # Потім додаємо решту
+        for resource, endpoints in grouped.items():
+            if resource not in sorted_grouped:
+                sorted_grouped[resource] = endpoints
+
+        return sorted_grouped
+
+    def _extract_resource_from_path(self, path: str) -> str:
+        """Визначає ресурс з шляху endpoint'а."""
+        if not path:
+            return "Other"
+
+        # Видаляємо leading slash та беремо перший сегмент
+        segments = path.strip("/").split("/")
+        if segments:
+            return segments[0]
+
+        return "Other"

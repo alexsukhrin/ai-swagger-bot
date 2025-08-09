@@ -16,7 +16,6 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_swagger_bot
       - USE_PGVECTOR=true
-      - API_SERVICE_URL=${API_SERVICE_URL:-http://0.0.0.0:5050}
       - ENABLE_API_CALLS=true
     env_file:
       - .env
@@ -71,23 +70,6 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-
-  # API Service (External API that bot will call)
-  api-service:
-    build: ./api-service
-    container_name: ai-swagger-bot-api-service
-    ports:
-      - "5050:3030"
-    environment:
-      - NODE_ENV=development
-      - PORT=3030
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3030/health"]
       interval: 30s
       timeout: 10s
       retries: 3
