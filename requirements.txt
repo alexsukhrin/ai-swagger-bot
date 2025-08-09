@@ -7,7 +7,7 @@ httpx==0.25.2
 jinja2==3.1.2
 langchain==0.0.350
 langchain-community==0.0.10
-langchain-openai==0.0.2
+langchain-openai==0.3.29
 
 # Core dependencies
 # Python 3.9+ compatible
