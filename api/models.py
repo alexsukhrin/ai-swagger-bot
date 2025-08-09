@@ -41,37 +41,6 @@ class User(Base):
     chat_sessions = relationship("ChatSession", back_populates="user")
     prompt_templates = relationship("PromptTemplate", back_populates="user")
     api_embeddings = relationship("ApiEmbedding", back_populates="user")
-    api_tokens = relationship("ApiToken", back_populates="user")
-
-
-class ApiToken(Base):
-    __tablename__ = "api_tokens"
-
-    id = Column(String(36), primary_key=True)  # UUID
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False)
-    swagger_spec_id = Column(String(36), ForeignKey("swagger_specs.id"), nullable=False)
-    token_name = Column(String(255), nullable=False)  # Назва токена (наприклад, "OpenAI API Key")
-    token_value = Column(Text, nullable=False)  # Зашифрований токен
-    token_type = Column(String(50), nullable=False)  # Тип токена (api_key, bearer, oauth2, etc.)
-    is_active = Column(Boolean, default=True)
-    expires_at = Column(DateTime, nullable=True)  # Дата закінчення токена
-    last_used_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    user = relationship("User", back_populates="api_tokens")
-    swagger_spec = relationship("SwaggerSpec", back_populates="api_tokens")
-
-    # Унікальний констрейнт для уникнення дублювання токенів
-    __table_args__ = (
-        UniqueConstraint(
-            "user_id", "swagger_spec_id", "token_name", name="uq_user_swagger_token_name"
-        ),
-        Index("idx_token_user_swagger", "user_id", "swagger_spec_id"),
-        Index("idx_token_expires", "expires_at"),
-        Index("idx_token_active", "is_active"),
-    )
 
 
 class SwaggerSpec(Base):
@@ -84,6 +53,7 @@ class SwaggerSpec(Base):
     parsed_data = Column(JSON, nullable=False)  # Зберігаємо розпарсені дані
     base_url = Column(String(500), nullable=True)  # Base URL з Swagger специфікації
     endpoints_count = Column(Integer, default=0)
+    jwt_token = Column(Text, nullable=True)  # JWT токен для автентифікації
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -92,7 +62,6 @@ class SwaggerSpec(Base):
     user = relationship("User", back_populates="swagger_specs")
     chat_sessions = relationship("ChatSession", back_populates="swagger_spec")
     api_embeddings = relationship("ApiEmbedding", back_populates="swagger_spec")
-    api_tokens = relationship("ApiToken", back_populates="swagger_spec")
 
     # Унікальний констрейнт для уникнення дублювання файлів у одного користувача
     __table_args__ = (
@@ -247,31 +216,6 @@ class UserCreate(BaseModel):
     email: str
     username: str
     password: str
-
-
-class ApiTokenResponse(BaseModel):
-    id: str
-    token_name: str
-    token_type: str
-    is_active: bool
-    expires_at: Optional[datetime]
-    last_used_at: Optional[datetime]
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
-
-
-class ApiTokenCreate(BaseModel):
-    token_name: str
-    token_value: str
-    token_type: str = "api_key"
-    expires_at: Optional[datetime] = None
-
-
-class ApiTokenUpdate(BaseModel):
-    token_value: str
-    expires_at: Optional[datetime] = None
 
 
 class SwaggerSpecResponse(BaseModel):

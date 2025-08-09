@@ -28,7 +28,6 @@ from .auth import create_demo_user, get_current_user, verify_token
 from .database import get_db
 from .models import (
     ApiEmbedding,
-    ApiToken,
     ChatMessage,
     ChatSession,
 )
@@ -39,7 +38,6 @@ from .models import (
 )
 from .prompts import router as prompts_router
 from .queue_manager import queue_manager
-from .tokens import router as tokens_router
 from .users import router as users_router
 
 # Налаштування логування
@@ -67,7 +65,7 @@ admin = setup_admin(app)
 # Підключаємо роутери
 app.include_router(prompts_router)
 app.include_router(users_router)
-app.include_router(tokens_router)
+
 
 # Security
 security = HTTPBearer()
@@ -243,41 +241,19 @@ def create_auth_tokens_for_swagger(
     created_tokens = []
 
     try:
-        # Створюємо JWT токен, якщо надано
+        # Зберігаємо JWT токен прямо в SwaggerSpec, якщо надано
         if auth_data.jwt_token:
-            jwt_token = ApiToken(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                swagger_spec_id=swagger_spec_id,
-                token_name="jwt_auth",
-                token_value=auth_data.jwt_token,
-                token_type="jwt",
-                is_active=True,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
+            swagger_spec = (
+                db.query(SwaggerSpec)
+                .filter(SwaggerSpec.id == swagger_spec_id, SwaggerSpec.user_id == user_id)
+                .first()
             )
 
-            db.add(jwt_token)
-            created_tokens.append("jwt_auth")
-            logger.info("✅ Створено JWT токен для авторизації")
-
-        # Створюємо додаткові API токени
-        for token_data in auth_data.api_tokens or []:
-            token = ApiToken(
-                id=str(uuid.uuid4()),
-                user_id=user_id,
-                swagger_spec_id=swagger_spec_id,
-                token_name=token_data.token_name,
-                token_value=token_data.token_value,
-                token_type=token_data.token_type,
-                is_active=True,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-
-            db.add(token)
-            created_tokens.append(token_data.token_name)
-            logger.info(f"✅ Створено API токен: {token_data.token_name}")
+            if swagger_spec:
+                swagger_spec.jwt_token = auth_data.jwt_token
+                swagger_spec.updated_at = datetime.now()
+                created_tokens.append("jwt_auth")
+                logger.info("✅ Створено JWT токен для авторизації")
 
         if created_tokens:
             db.commit()
@@ -567,34 +543,10 @@ async def chat(
         if not swagger_spec:
             raise HTTPException(status_code=404, detail="Swagger специфікація не знайдена")
 
-        # Перевіряємо чи є активні токени для цієї специфікації
-        active_tokens = (
-            db.query(ApiToken)
-            .filter(
-                ApiToken.user_id == current_user.id,
-                ApiToken.swagger_spec_id == session.swagger_spec_id,
-                ApiToken.is_active == True,
-            )
-            .all()
-        )
-
-        # Перевіряємо термін дії токенів
-        from src.token_manager import get_token_manager
-
-        token_manager = get_token_manager()
-
-        expired_tokens = []
-        for token in active_tokens:
-            if token_manager.is_token_expired(token.expires_at):
-                token.is_active = False
-                expired_tokens.append(token.token_name)
-
-        if expired_tokens:
-            db.commit()
-            raise HTTPException(
-                status_code=400,
-                detail=f"Наступні токени закінчилися: {', '.join(expired_tokens)}. Будь ласка, оновіть їх.",
-            )
+        # Перевіряємо чи є JWT токен для цієї специфікації
+        if not swagger_spec.jwt_token:
+            logger.warning("JWT токен не знайдено для Swagger специфікації")
+            # Продовжуємо роботу без JWT токена
 
         # Створюємо RAG engine для конкретного користувача
         rag_engine = PostgresRAGEngine(
@@ -811,35 +763,23 @@ async def get_statistics(
             .count()
         )
 
-        # Статистика токенів
-        tokens_count = db.query(ApiToken).filter(ApiToken.user_id == current_user.id).count()
-
-        # Перевіряємо закінчені токени
-        from src.token_manager import get_token_manager
-
-        token_manager = get_token_manager()
-        expired_tokens = (
-            db.query(ApiToken)
-            .filter(ApiToken.user_id == current_user.id, ApiToken.is_active == True)
-            .all()
+        # Підраховуємо Swagger specs з JWT токенами
+        jwt_tokens_count = (
+            db.query(SwaggerSpec)
+            .filter(
+                SwaggerSpec.user_id == current_user.id,
+                SwaggerSpec.jwt_token.isnot(None),
+                SwaggerSpec.is_active == True,
+            )
+            .count()
         )
-
-        expired_count = 0
-        for token in expired_tokens:
-            if token_manager.is_token_expired(token.expires_at):
-                token.is_active = False
-                expired_count += 1
-
-        if expired_count > 0:
-            db.commit()
 
         return {
             "user_id": current_user.id,
             "swagger_specs_count": swagger_specs_count,
             "embeddings_count": embeddings_count,
             "messages_count": messages_count,
-            "tokens_count": tokens_count,
-            "expired_tokens_count": expired_count,
+            "jwt_tokens_count": jwt_tokens_count,
         }
 
     except Exception as e:
