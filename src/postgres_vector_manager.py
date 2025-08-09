@@ -82,7 +82,7 @@ class PostgresVectorManager:
                             method VARCHAR(10) NOT NULL,
                             description TEXT NOT NULL,
                             embedding TEXT NOT NULL,
-                            metadata JSONB,
+                            embedding_metadata JSONB,
                             created_at TIMESTAMP DEFAULT NOW(),
                             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                             FOREIGN KEY (swagger_spec_id) REFERENCES swagger_specs(id) ON DELETE CASCADE,
@@ -196,7 +196,7 @@ class PostgresVectorManager:
                             """
                         UPDATE api_embeddings
                         SET description = :description, embedding = :embedding,
-                            metadata = :metadata, created_at = :created_at
+                            embedding_metadata = :metadata, created_at = :created_at
                         WHERE id = :id
                     """
                         ),
@@ -204,7 +204,7 @@ class PostgresVectorManager:
                             "id": embedding_id,
                             "description": description,
                             "embedding": embedding_json,
-                            "metadata": json.dumps(metadata) if metadata else None,
+                            "embedding_metadata": json.dumps(metadata) if metadata else None,
                             "created_at": datetime.now().isoformat(),
                         },
                     )
@@ -219,9 +219,9 @@ class PostgresVectorManager:
                             """
                         INSERT INTO api_embeddings
                         (id, user_id, swagger_spec_id, endpoint_path, method, description,
-                         embedding, metadata, created_at)
+                         embedding, embedding_metadata, created_at)
                         VALUES (:id, :user_id, :swagger_spec_id, :endpoint_path, :method,
-                               :description, :embedding, :metadata, :created_at)
+                               :description, :embedding, :embedding_metadata, :created_at)
                     """
                         ),
                         {
@@ -232,7 +232,7 @@ class PostgresVectorManager:
                             "method": method,
                             "description": description,
                             "embedding": embedding_json,
-                            "metadata": json.dumps(metadata) if metadata else None,
+                            "embedding_metadata": json.dumps(metadata) if metadata else None,
                             "created_at": datetime.now().isoformat(),
                         },
                     )
@@ -271,7 +271,7 @@ class PostgresVectorManager:
 
             # Базовий запит з фільтрацією по користувачу
             base_query = """
-                SELECT id, endpoint_path, method, description, embedding, metadata, created_at
+                SELECT id, endpoint_path, method, description, embedding, embedding_metadata, created_at
                 FROM api_embeddings
                 WHERE user_id = :user_id
             """
@@ -329,7 +329,7 @@ class PostgresVectorManager:
         """
         try:
             base_query = """
-                SELECT id, endpoint_path, method, description, embedding, metadata, created_at
+                SELECT id, endpoint_path, method, description, embedding, embedding_metadata, created_at
                 FROM api_embeddings
                 WHERE user_id = :user_id
             """

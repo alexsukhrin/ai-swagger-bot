@@ -16,7 +16,7 @@ load_dotenv()
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "src"))
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
-from rag_engine import RAGEngine
+from rag_engine import PostgresRAGEngine
 from src.config import Config
 
 
@@ -39,7 +39,9 @@ def view_chromadb_vectors():
 
         # Створюємо RAG Engine для доступу до бази
         rag_config = Config.get_rag_config()
-        rag_engine = RAGEngine(Config.SWAGGER_SPEC_PATH, config=rag_config)
+        rag_engine = PostgresRAGEngine(
+            user_id="view_user", swagger_spec_id="view_spec", config=rag_config
+        )
 
         # Отримуємо всі endpoints
         print("\n📊 Отримання всіх векторів...")
@@ -140,7 +142,9 @@ def analyze_vector_statistics():
 
         # Створюємо RAG Engine
         rag_config = Config.get_rag_config()
-        rag_engine = RAGEngine(Config.SWAGGER_SPEC_PATH, config=rag_config)
+        rag_engine = PostgresRAGEngine(
+            user_id="view_user", swagger_spec_id="view_spec", config=rag_config
+        )
 
         # Отримуємо всі endpoints
         all_endpoints = rag_engine.get_all_endpoints()

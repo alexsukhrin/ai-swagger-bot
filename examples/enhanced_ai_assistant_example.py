@@ -10,7 +10,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.enhanced_ai_assistant import EnhancedAIAssistant
 from src.enhanced_prompt_manager import EnhancedPromptManager
-from src.rag_engine import RAGEngine
+from src.rag_engine import PostgresRAGEngine
 
 
 def demo_enhanced_ai_assistant():
@@ -22,7 +22,7 @@ def demo_enhanced_ai_assistant():
 
     # Ініціалізація компонентів
     prompt_manager = EnhancedPromptManager()
-    rag_engine = RAGEngine()
+    rag_engine = PostgresRAGEngine(user_id="example_user", swagger_spec_id="example_spec")
     assistant = EnhancedAIAssistant(prompt_manager, rag_engine)
 
     # Додавання тестових даних
@@ -195,7 +195,7 @@ def demo_specific_features():
     print("=" * 50)
 
     prompt_manager = EnhancedPromptManager()
-    rag_engine = RAGEngine()
+    rag_engine = PostgresRAGEngine(user_id="example_user", swagger_spec_id="example_spec")
     assistant = EnhancedAIAssistant(prompt_manager, rag_engine)
 
     # Демонстрація створення опису товару
@@ -235,7 +235,7 @@ def demo_conversation_history():
     print("=" * 50)
 
     prompt_manager = EnhancedPromptManager()
-    rag_engine = RAGEngine()
+    rag_engine = PostgresRAGEngine(user_id="example_user", swagger_spec_id="example_spec")
     assistant = EnhancedAIAssistant(prompt_manager, rag_engine)
 
     user_id = "test_user"

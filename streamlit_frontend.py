@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Конфігурація API
 API_BASE_URL = os.getenv("API_BASE_URL", "http://api:8000")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+ENABLE_API_CALLS = os.getenv("ENABLE_API_CALLS", "false").lower() == "true"
 
 
 def check_environment():
@@ -30,6 +31,13 @@ def check_environment():
         st.error("❌ Не знайдено OPENAI_API_KEY в змінних середовища!")
         st.info("Створіть файл .env з OPENAI_API_KEY=your_key_here")
         return False
+
+    # Показуємо статус API викликів
+    if ENABLE_API_CALLS:
+        st.success("✅ API виклики увімкнено")
+    else:
+        st.warning("⚠️ API виклики вимкнено (режим превью)")
+
     return True
 
 
@@ -47,6 +55,8 @@ def initialize_session_state():
         st.session_state.is_authenticated = False
     if "prompts_generated" not in st.session_state:
         st.session_state.prompts_generated = False
+    if "enable_api_calls" not in st.session_state:
+        st.session_state.enable_api_calls = ENABLE_API_CALLS
 
 
 def get_auth_headers():
@@ -96,21 +106,34 @@ def create_demo_user():
         return False
 
 
-def upload_swagger_file(file, auto_generate_prompts: bool = True) -> Optional[str]:
+def upload_swagger_file(
+    file, jwt_token: str = None, auto_generate_prompts: bool = True
+) -> Optional[str]:
     """Завантажує Swagger файл через API та опціонально генерує промпти."""
     try:
         files = {"file": (file.name, file.getvalue(), "application/json")}
         headers = get_auth_headers()
         headers.pop("Content-Type", None)  # Remove Content-Type for file upload
 
+        # Додаємо JWT токен як form data
+        data = {}
+        if jwt_token:
+            data["jwt_token"] = jwt_token
+
         response = requests.post(
-            f"{API_BASE_URL}/upload-swagger", files=files, headers=headers, timeout=30
+            f"{API_BASE_URL}/upload-swagger", files=files, data=data, headers=headers, timeout=30
         )
 
         if response.status_code == 200:
-            data = response.json()
-            swagger_id = data["swagger_id"]
+            response_data = response.json()
+            swagger_id = response_data["swagger_id"]
             st.session_state.swagger_id = swagger_id
+
+            # Показуємо інформацію про створені токени
+            if response_data.get("created_tokens"):
+                st.success(
+                    f"✅ Створено {len(response_data['created_tokens'])} токенів авторизації"
+                )
 
             # Автоматично генеруємо промпти після успішного завантаження
             if auto_generate_prompts:
@@ -361,6 +384,20 @@ def main():
     st.title("🤖 AI Swagger Bot")
     st.markdown("**Інтерактивний чат-бот для роботи зі Swagger специфікаціями**")
 
+    # Статус API викликів в головній частині
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.session_state.enable_api_calls:
+            st.success("🔗 API виклики: Увімкнено")
+        else:
+            st.warning("🔗 API виклики: Вимкнено")
+
+    with col2:
+        if st.session_state.is_authenticated:
+            st.success("👤 Авторизовано")
+        else:
+            st.info("👤 Не авторизовано")
+
     # Перевіряємо стан API
     if not check_api_health():
         st.error("❌ API сервіс недоступний. Перевірте, чи запущений FastAPI сервіс.")
@@ -390,9 +427,30 @@ def main():
                 st.session_state.messages = []
                 st.rerun()
 
+        # Статус API викликів
+        st.subheader("🔗 API Виклики")
+        if st.session_state.enable_api_calls:
+            st.success("✅ API виклики увімкнено")
+            st.info("Бот може виконувати реальні API запити")
+        else:
+            st.warning("⚠️ API виклики вимкнено")
+            st.info("Бот показує тільки превью запитів")
+
         # Завантаження Swagger
         if st.session_state.is_authenticated:
             st.subheader("📁 Завантаження Swagger")
+
+            # Поле для JWT токена (опціональне)
+            st.info(
+                "💡 **JWT токен**: Якщо API потребує авторизації, введіть JWT токен. Якщо API публічне - залиште порожнім."
+            )
+            jwt_token = st.text_input(
+                "🔑 JWT токен для авторизації (опціонально)",
+                type="password",
+                help="Введіть JWT токен для авторизації на сторонньому сервері. Залиште порожнім для публічних API.",
+                placeholder="Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+            )
+
             uploaded_file = st.file_uploader(
                 "Виберіть Swagger JSON файл",
                 type=["json"],
@@ -402,7 +460,11 @@ def main():
             if uploaded_file is not None:
                 if st.button("📤 Завантажити Swagger"):
                     with st.spinner("Завантаження..."):
-                        swagger_id = upload_swagger_file(uploaded_file, auto_generate_prompts=True)
+                        # Передаємо JWT токен тільки якщо він введений
+                        jwt_to_send = jwt_token.strip() if jwt_token and jwt_token.strip() else None
+                        swagger_id = upload_swagger_file(
+                            uploaded_file, jwt_token=jwt_to_send, auto_generate_prompts=True
+                        )
                         if swagger_id:
                             st.success("✅ Swagger файл успішно завантажено!")
                             st.session_state.swagger_spec_id = swagger_id

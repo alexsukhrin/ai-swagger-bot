@@ -12,11 +12,12 @@ services:
       - JWT_TOKEN=${JWT_TOKEN:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
       - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_swagger_bot
       - USE_PGVECTOR=true
       - API_SERVICE_URL=${API_SERVICE_URL:-http://0.0.0.0:5050}
+      - ENABLE_API_CALLS=true
     env_file:
       - .env
     volumes:
@@ -43,7 +44,7 @@ services:
       - JWT_TOKEN=${JWT_TOKEN:-}
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4}
       - OPENAI_TEMPERATURE=${OPENAI_TEMPERATURE:-0}
-      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-120}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - USE_PGVECTOR=true
       - API_BASE_URL=http://api:8000
@@ -52,6 +53,7 @@ services:
       - STREAMLIT_SERVER_HEADLESS=true
       - STREAMLIT_SERVER_ENABLE_CORS=false
       - STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
+      - ENABLE_API_CALLS=true
     env_file:
       - .env
     volumes:

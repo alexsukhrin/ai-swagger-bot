@@ -7,8 +7,10 @@ import logging
 import os
 import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import yaml
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -36,6 +38,7 @@ from .models import (
     User,
 )
 from .prompts import router as prompts_router
+from .queue_manager import queue_manager
 from .tokens import router as tokens_router
 from .users import router as users_router
 
@@ -61,11 +64,6 @@ app.add_middleware(
 # Налаштування адмін панелі
 admin = setup_admin(app)
 
-# Підключаємо адмін веб-інтерфейс
-from .admin_ui import admin_app
-
-app.mount("/admin", admin_app)
-
 # Підключаємо роутери
 app.include_router(prompts_router)
 app.include_router(users_router)
@@ -88,12 +86,25 @@ class ChatResponse(BaseModel):
     swagger_id: Optional[str] = None
 
 
+class SwaggerTokenData(BaseModel):
+    token_name: str
+    token_value: str
+    token_type: str = "api_key"
+
+
+class SwaggerAuthData(BaseModel):
+    jwt_token: Optional[str] = None  # JWT токен для авторизації на сторонньому сервері
+    api_tokens: Optional[List[SwaggerTokenData]] = []  # Додаткові API токени
+
+
 class SwaggerUploadResponse(BaseModel):
     swagger_id: str
     message: str
     endpoints_count: int
     requires_tokens: bool = False
     token_requirements: List[str] = []
+    created_tokens: List[str] = []
+    task_id: Optional[str] = None
 
 
 class EmbeddingsResponse(BaseModel):
@@ -101,6 +112,20 @@ class EmbeddingsResponse(BaseModel):
     user_id: str
     swagger_spec_id: str
     message: str
+
+
+class TaskStatusResponse(BaseModel):
+    task_id: str
+    status: str
+    progress: int
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    error_message: Optional[str] = None
+
+
+class UserTasksResponse(BaseModel):
+    tasks: List[TaskStatusResponse]
 
 
 def get_user_session(db: Session, user_id: str) -> ChatSession:
@@ -200,6 +225,72 @@ def check_swagger_token_requirements(swagger_data: dict) -> tuple[bool, List[str
         return False, []
 
 
+def create_auth_tokens_for_swagger(
+    db: Session, user_id: str, swagger_spec_id: str, auth_data: SwaggerAuthData
+) -> List[str]:
+    """
+    Створює токени авторизації для Swagger специфікації.
+
+    Args:
+        db: Сесія бази даних
+        user_id: ID користувача
+        swagger_spec_id: ID Swagger специфікації
+        auth_data: Дані авторизації від користувача
+
+    Returns:
+        Список створених токенів
+    """
+    created_tokens = []
+
+    try:
+        # Створюємо JWT токен, якщо надано
+        if auth_data.jwt_token:
+            jwt_token = ApiToken(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                swagger_spec_id=swagger_spec_id,
+                token_name="jwt_auth",
+                token_value=auth_data.jwt_token,
+                token_type="jwt",
+                is_active=True,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+
+            db.add(jwt_token)
+            created_tokens.append("jwt_auth")
+            logger.info("✅ Створено JWT токен для авторизації")
+
+        # Створюємо додаткові API токени
+        for token_data in auth_data.api_tokens or []:
+            token = ApiToken(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                swagger_spec_id=swagger_spec_id,
+                token_name=token_data.token_name,
+                token_value=token_data.token_value,
+                token_type=token_data.token_type,
+                is_active=True,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+
+            db.add(token)
+            created_tokens.append(token_data.token_name)
+            logger.info(f"✅ Створено API токен: {token_data.token_name}")
+
+        if created_tokens:
+            db.commit()
+            logger.info(f"✅ Створено {len(created_tokens)} токенів авторизації")
+
+        return created_tokens
+
+    except Exception as e:
+        logger.error(f"Помилка створення токенів авторизації: {e}")
+        db.rollback()
+        return []
+
+
 def cleanup_old_sessions(db: Session, user_id: str, keep_last: int = 5):
     """Очищає старі неактивні сесії користувача, залишаючи останні N."""
     try:
@@ -239,6 +330,105 @@ def cleanup_old_sessions(db: Session, user_id: str, keep_last: int = 5):
         return 0
 
 
+def load_base_prompts_from_yaml() -> List[Dict[str, Any]]:
+    """
+    Завантажує базові промпти з YAML файлу.
+
+    Returns:
+        Список промптів для завантаження в базу даних
+    """
+    prompts = []
+
+    try:
+        # Шлях до YAML файлу з промптами
+        yaml_path = Path("prompts/base_prompts.yaml")
+
+        if not yaml_path.exists():
+            logger.warning("⚠️ Файл prompts/base_prompts.yaml не знайдено")
+            return prompts
+
+        with open(yaml_path, "r", encoding="utf-8") as file:
+            yaml_data = yaml.safe_load(file)
+
+        # Обробляємо промпти з секції prompts
+        prompts_data = yaml_data.get("prompts", {})
+
+        for prompt_id, prompt_data in prompts_data.items():
+            prompt = {
+                "id": str(uuid.uuid4()),
+                "name": prompt_data.get("name", ""),
+                "description": prompt_data.get("description", ""),
+                "template": prompt_data.get("template", ""),
+                "category": prompt_data.get("category", "general"),
+                "tags": prompt_data.get("tags", []),
+                "is_public": True,
+                "is_active": True,
+                "usage_count": 0,
+                "success_rate": 0,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now(),
+                "source": "yaml_base",
+            }
+            prompts.append(prompt)
+
+        logger.info(f"✅ Завантажено {len(prompts)} базових промптів з YAML")
+        return prompts
+
+    except Exception as e:
+        logger.error(f"❌ Помилка завантаження базових промптів: {e}")
+        return prompts
+
+
+def create_user_with_base_prompts(user_data: Dict[str, Any], db: Session) -> User:
+    """
+    Створює користувача та завантажує для нього базові промпти.
+
+    Args:
+        user_data: Дані користувача
+        db: Сесія бази даних
+
+    Returns:
+        Створений користувач
+    """
+    try:
+        # Створюємо користувача
+        user = User(**user_data)
+        db.add(user)
+        db.flush()  # Отримуємо ID користувача
+
+        # Завантажуємо базові промпти
+        base_prompts = load_base_prompts_from_yaml()
+
+        for prompt_data in base_prompts:
+            # Створюємо копію промпту для користувача
+            user_prompt = DBPromptTemplate(
+                id=str(uuid.uuid4()),
+                user_id=user.id,  # Прив'язуємо до користувача
+                name=prompt_data["name"],
+                description=prompt_data["description"],
+                template=prompt_data["template"],
+                category=prompt_data["category"],
+                tags=prompt_data["tags"],
+                is_public=False,  # Промпти користувача не публічні
+                is_active=True,
+                usage_count=0,
+                success_rate=0,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(user_prompt)
+
+        db.commit()
+        logger.info(f"✅ Створено користувача {user.id} з {len(base_prompts)} базовими промптами")
+
+        return user
+
+    except Exception as e:
+        logger.error(f"❌ Помилка створення користувача з промптами: {e}")
+        db.rollback()
+        raise
+
+
 @app.get("/health")
 async def health_check():
     """Перевірка стану сервісу."""
@@ -265,6 +455,8 @@ async def health_check():
 @app.post("/upload-swagger", response_model=SwaggerUploadResponse)
 async def upload_swagger(
     file: UploadFile = File(...),
+    jwt_token: Optional[str] = Form(None),  # JWT токен для авторизації
+    api_tokens: Optional[str] = Form(None),  # JSON string з додатковими API токенами
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -307,43 +499,43 @@ async def upload_swagger(
         session.swagger_spec_id = swagger_id
         db.commit()
 
-        # Створюємо embeddings для цього Swagger файлу
-        try:
-            # Створюємо тимчасовий файл
-            import tempfile
-
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
-                temp_file.write(json.dumps(swagger_data))
-                temp_file_path = temp_file.name
-
+        # Обробляємо токени авторизації від користувача
+        created_tokens = []
+        if jwt_token or api_tokens:
             try:
-                # Створюємо RAG engine для конкретного користувача
-                rag_engine = PostgresRAGEngine(user_id=current_user.id, swagger_spec_id=swagger_id)
+                # Парсимо додаткові API токени
+                api_tokens_list = []
+                if api_tokens:
+                    api_tokens_data = json.loads(api_tokens)
+                    api_tokens_list = [SwaggerTokenData(**token) for token in api_tokens_data]
 
-                # Створюємо embeddings
-                success = rag_engine.create_vectorstore_from_swagger(temp_file_path)
+                # Створюємо об'єкт з даними авторизації
+                auth_data = SwaggerAuthData(jwt_token=jwt_token, api_tokens=api_tokens_list)
 
-                if success:
-                    logger.info(f"✅ Створено embeddings для користувача {current_user.id}")
-                else:
-                    logger.warning(
-                        f"⚠️ Не вдалося створити embeddings для користувача {current_user.id}"
-                    )
+                created_tokens = create_auth_tokens_for_swagger(
+                    db, current_user.id, swagger_id, auth_data
+                )
+            except Exception as e:
+                logger.error(f"Помилка обробки токенів авторизації: {e}")
+                # Продовжуємо без токенів
 
-            finally:
-                # Видаляємо тимчасовий файл
-                os.unlink(temp_file_path)
+        # Додаємо завдання створення embeddings в чергу
+        task_id = queue_manager.add_task(current_user.id, swagger_id, swagger_data)
+        logger.info(f"📋 Додано завдання створення embeddings: {task_id}")
 
-        except Exception as e:
-            logger.error(f"Помилка створення embeddings: {e}")
-            # Не блокуємо завантаження Swagger, якщо embeddings не створилися
+        # Формуємо повідомлення
+        message = "Swagger специфікація успішно завантажена. Embeddings створюються в фоні."
+        if created_tokens:
+            message += f" Створено {len(created_tokens)} токенів."
 
         return SwaggerUploadResponse(
             swagger_id=swagger_id,
-            message="Swagger специфікація успішно завантажена",
+            message=message,
             endpoints_count=len(parsed_data.get("endpoints", [])),
             requires_tokens=requires_tokens,
             token_requirements=token_requirements,
+            created_tokens=created_tokens,
+            task_id=task_id,
         )
 
     except Exception as e:
@@ -420,7 +612,12 @@ async def chat(
 
         try:
             # Створюємо API агента з тимчасовим файлом
-            agent = InteractiveSwaggerAgent(temp_file_path)
+            agent = InteractiveSwaggerAgent(
+                temp_file_path,
+                enable_api_calls=True,  # Увімкнути API виклики
+                user_id=current_user.id,
+                swagger_spec_id=session.swagger_spec_id,
+            )
 
             # Отримуємо контекст з RAG для конкретного користувача
             similar_endpoints = rag_engine.search_similar_endpoints(request.message, limit=3)
@@ -692,6 +889,56 @@ async def debug_user_sessions(
 
     except Exception as e:
         logger.error(f"Error in debug_sessions: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+):
+    """Отримує статус завдання створення embeddings"""
+    try:
+        task_status = queue_manager.get_task_status(task_id)
+
+        if not task_status:
+            raise HTTPException(status_code=404, detail="Завдання не знайдено")
+
+        return TaskStatusResponse(**task_status)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting task status: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/tasks", response_model=UserTasksResponse)
+async def get_user_tasks(
+    current_user: User = Depends(get_current_user),
+):
+    """Отримує всі завдання користувача"""
+    try:
+        user_tasks = queue_manager.get_user_tasks(current_user.id)
+
+        return UserTasksResponse(tasks=[TaskStatusResponse(**task) for task in user_tasks])
+
+    except Exception as e:
+        logger.error(f"Error getting user tasks: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/tasks/cleanup")
+async def cleanup_old_tasks(
+    current_user: User = Depends(get_current_user),
+):
+    """Очищає старі завдання"""
+    try:
+        queue_manager.cleanup_old_tasks()
+        return {"message": "Старі завдання очищено"}
+
+    except Exception as e:
+        logger.error(f"Error cleaning up tasks: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

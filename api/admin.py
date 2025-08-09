@@ -9,7 +9,7 @@ from sqladmin import Admin, ModelView
 from sqlalchemy.orm import Session
 
 from .database import engine
-from .models import APICall, ChatMessage, ChatSession, PromptTemplate, SwaggerSpec, User
+from .models import ApiCall, ChatMessage, ChatSession, PromptTemplate, SwaggerSpec, User
 
 
 class UserAdmin(ModelView, model=User):
@@ -57,6 +57,7 @@ class SwaggerSpecAdmin(ModelView, model=SwaggerSpec):
     ]
     column_searchable_list = [SwaggerSpec.filename]
     column_sortable_list = [SwaggerSpec.created_at, SwaggerSpec.endpoints_count]
+    column_filters = [SwaggerSpec.user_id, SwaggerSpec.is_active]
     column_default_sort = ("created_at", True)
 
     can_create = True
@@ -84,6 +85,7 @@ class ChatSessionAdmin(ModelView, model=ChatSession):
     ]
     column_searchable_list = [ChatSession.session_name]
     column_sortable_list = [ChatSession.created_at, ChatSession.is_active]
+    column_filters = [ChatSession.user_id, ChatSession.is_active]
     column_default_sort = ("created_at", True)
 
     can_create = True
@@ -101,12 +103,13 @@ class ChatMessageAdmin(ModelView, model=ChatMessage):
 
     column_list = [
         ChatMessage.id,
-        ChatMessage.message_type,
+        ChatMessage.role,
         ChatMessage.chat_session_id,
         ChatMessage.created_at,
     ]
     column_searchable_list = [ChatMessage.content]
-    column_sortable_list = [ChatMessage.created_at, ChatMessage.message_type]
+    column_sortable_list = [ChatMessage.created_at, ChatMessage.role]
+    column_filters = [ChatMessage.role, ChatMessage.chat_session_id]
     column_default_sort = ("created_at", True)
 
     can_create = True
@@ -133,12 +136,27 @@ class PromptTemplateAdmin(ModelView, model=PromptTemplate):
         PromptTemplate.id,
         PromptTemplate.name,
         PromptTemplate.category,
+        PromptTemplate.user_id,
         PromptTemplate.is_public,
         PromptTemplate.is_active,
         PromptTemplate.created_at,
     ]
-    column_searchable_list = [PromptTemplate.name, PromptTemplate.description]
-    column_sortable_list = [PromptTemplate.created_at, PromptTemplate.is_active]
+    column_searchable_list = [
+        PromptTemplate.name,
+        PromptTemplate.description,
+        PromptTemplate.user_id,
+    ]
+    column_sortable_list = [
+        PromptTemplate.created_at,
+        PromptTemplate.is_active,
+        PromptTemplate.user_id,
+    ]
+    column_filters = [
+        PromptTemplate.user_id,
+        PromptTemplate.category,
+        PromptTemplate.is_public,
+        PromptTemplate.is_active,
+    ]
     column_default_sort = ("created_at", True)
 
     can_create = True
@@ -147,7 +165,7 @@ class PromptTemplateAdmin(ModelView, model=PromptTemplate):
     can_view_details = True
 
 
-class APICallAdmin(ModelView, model=APICall):
+class APICallAdmin(ModelView, model=ApiCall):
     """Адмін панель для API викликів"""
 
     name = "API Виклик"
@@ -155,15 +173,17 @@ class APICallAdmin(ModelView, model=APICall):
     icon = "fa-solid fa-code"
 
     column_list = [
-        APICall.id,
-        APICall.endpoint,
-        APICall.method,
-        APICall.status_code,
-        APICall.execution_time,
-        APICall.created_at,
+        ApiCall.id,
+        ApiCall.user_id,
+        ApiCall.endpoint_path,
+        ApiCall.method,
+        ApiCall.status_code,
+        ApiCall.execution_time,
+        ApiCall.created_at,
     ]
-    column_searchable_list = [APICall.endpoint]
-    column_sortable_list = [APICall.created_at, APICall.status_code, APICall.execution_time]
+    column_searchable_list = [ApiCall.endpoint_path]
+    column_sortable_list = [ApiCall.created_at, ApiCall.status_code, ApiCall.execution_time]
+    column_filters = [ApiCall.user_id, ApiCall.method, ApiCall.status_code]
     column_default_sort = ("created_at", True)
 
     can_create = False  # API виклики створюються автоматично

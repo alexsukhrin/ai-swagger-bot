@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import pickle
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -15,13 +16,13 @@ import requests
 
 # Імпортуємо модулі
 try:
+    from .enhanced_prompt_manager import EnhancedPromptManager
     from .enhanced_swagger_parser import EnhancedSwaggerParser
-    from .prompt_templates import PromptTemplates
     from .rag_engine import PostgresRAGEngine
 except ImportError:
     try:
+        from enhanced_prompt_manager import EnhancedPromptManager
         from enhanced_swagger_parser import EnhancedSwaggerParser
-        from prompt_templates import PromptTemplates
         from rag_engine import PostgresRAGEngine
     except ImportError as e:
         print(f"❌ Помилка імпорту: {e}")
@@ -106,6 +107,8 @@ class InteractiveSwaggerAgent:
         openai_api_key: Optional[str] = None,
         jwt_token: Optional[str] = None,
         base_url_override: Optional[str] = None,
+        user_id: Optional[str] = None,
+        swagger_spec_id: Optional[str] = None,
     ):
         """
         Ініціалізація інтерактивного агента.
@@ -138,6 +141,8 @@ class InteractiveSwaggerAgent:
 
             # Налаштування
             self.enable_api_calls = enable_api_calls
+            self.user_id = user_id
+            self.swagger_spec_id = swagger_spec_id
             self.model = os.getenv("OPENAI_MODEL", "gpt-4")
             self.temperature = float(os.getenv("OPENAI_TEMPERATURE", "0"))
 
@@ -148,6 +153,9 @@ class InteractiveSwaggerAgent:
 
             # Ініціалізуємо RAG engine
             self._initialize_rag()
+
+            # Ініціалізуємо менеджер промптів
+            self.prompt_manager = EnhancedPromptManager()
 
             # Ініціалізуємо збереження історії
             self.conversation_history = InteractiveConversationHistory()
@@ -161,10 +169,15 @@ class InteractiveSwaggerAgent:
     def _initialize_rag(self):
         """Ініціалізація RAG engine з покращеним парсером."""
         try:
-            # Використовуємо PostgresRAGEngine замість RAGEngine
-            # self.rag_engine = RAGEngine(self.parser.swagger_spec_path)
-            # TODO: Оновити для використання PostgresRAGEngine з user_id та swagger_spec_id
-            logging.info("RAG engine ініціалізовано успішно")
+            # Використовуємо PostgresRAGEngine з правильними ID
+            user_id = getattr(self, "user_id", "default_user")
+            swagger_spec_id = getattr(self, "swagger_spec_id", "default_spec")
+
+            self.rag_engine = PostgresRAGEngine(user_id=user_id, swagger_spec_id=swagger_spec_id)
+
+            logging.info(
+                f"RAG engine ініціалізовано для user_id={user_id}, swagger_spec_id={swagger_spec_id}"
+            )
         except Exception as e:
             logging.error(f"Помилка ініціалізації RAG: {e}")
             raise
@@ -741,20 +754,68 @@ class InteractiveSwaggerAgent:
         """Формує заголовки для запиту."""
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
 
-        # Використовуємо зовнішній API токен для викликів зовнішніх API
-        external_api_token = os.getenv("EXTERNAL_API_TOKEN")
-        if external_api_token:
-            headers["Authorization"] = f"Bearer {external_api_token}"
+        # Отримуємо JWT токен з бази даних
+        jwt_token = self._get_jwt_token_from_db()
+        if jwt_token:
+            headers["Authorization"] = f"Bearer {jwt_token}"
+            logger.info("🔑 Використовую JWT токен з бази даних для авторизації")
         elif self.jwt_token:
             # Fallback до внутрішнього JWT токена
             headers["Authorization"] = f"Bearer {self.jwt_token}"
+            logger.info("🔑 Використовую внутрішній JWT токен для авторизації")
+        else:
+            # Використовуємо зовнішній API токен для викликів зовнішніх API
+            external_api_token = os.getenv("EXTERNAL_API_TOKEN")
+            if external_api_token:
+                headers["Authorization"] = f"Bearer {external_api_token}"
+                logger.info("🔑 Використовую зовнішній API токен для авторизації")
+            else:
+                logger.info("🌐 API роути можуть бути публічними (без авторизації)")
 
         return headers
+
+    def _get_jwt_token_from_db(self) -> Optional[str]:
+        """Отримує JWT токен з бази даних."""
+        try:
+            import os
+            import sys
+
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+            try:
+                from api.database import SessionLocal
+                from api.models import ApiToken
+            except ImportError:
+                return None
+
+            db = SessionLocal()
+            try:
+                # Отримуємо JWT токен для цієї Swagger специфікації
+                token = (
+                    db.query(ApiToken)
+                    .filter(
+                        ApiToken.user_id == self.user_id,
+                        ApiToken.swagger_spec_id == self.swagger_spec_id,
+                        ApiToken.token_name == "jwt_auth",
+                        ApiToken.is_active == True,
+                    )
+                    .first()
+                )
+
+                return token.token_value if token else None
+
+            finally:
+                db.close()
+
+        except Exception as e:
+            print(f"❌ Помилка отримання JWT токена з БД: {e}")
+            return None
 
     def _call_api(self, api_request: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Виконує API виклик з обробкою помилок."""
         try:
             timeout = int(os.getenv("REQUEST_TIMEOUT", "30"))
+            start_time = time.time()
 
             response = requests.request(
                 method=api_request["method"],
@@ -765,19 +826,110 @@ class InteractiveSwaggerAgent:
                 timeout=timeout,
             )
 
-            return {
+            execution_time = int((time.time() - start_time) * 1000)  # в мілісекундах
+
+            api_response = {
                 "status_code": response.status_code,
                 "headers": dict(response.headers),
                 "data": response.json() if response.content else None,
                 "text": response.text,
             }
 
+            # Перевіряємо помилки авторизації
+            if response.status_code == 401:
+                logger.warning("🔒 Помилка авторизації (401). Можливо потрібен JWT токен.")
+                api_response["error"] = "Unauthorized"
+                api_response["details"] = "Потрібна авторизація. Перевірте JWT токен."
+            elif response.status_code == 403:
+                logger.warning("🚫 Доступ заборонено (403). Недостатньо прав.")
+                api_response["error"] = "Forbidden"
+                api_response["details"] = "Недостатньо прав для доступу до цього endpoint."
+
+            # Записуємо API виклик в базу даних
+            self._record_api_call(api_request, api_response, execution_time)
+
+            return api_response
+
         except requests.exceptions.Timeout:
-            return {"error": "Таймаут запиту", "details": "Сервер не відповідає протягом 30 секунд"}
+            error_response = {
+                "error": "Таймаут запиту",
+                "details": "Сервер не відповідає протягом 30 секунд",
+            }
+            self._record_api_call(api_request, error_response, 0)
+            return error_response
         except requests.exceptions.ConnectionError:
-            return {"error": "Помилка з'єднання", "details": "Не вдалося підключитися до сервера"}
+            error_response = {
+                "error": "Помилка з'єднання",
+                "details": "Не вдалося підключитися до сервера",
+            }
+            self._record_api_call(api_request, error_response, 0)
+            return error_response
         except Exception as e:
-            return {"error": str(e), "details": "Невідома помилка при виконанні запиту"}
+            error_response = {"error": str(e), "details": "Невідома помилка при виконанні запиту"}
+            self._record_api_call(api_request, error_response, 0)
+            return error_response
+
+    def _record_api_call(
+        self, api_request: Dict[str, Any], api_response: Dict[str, Any], execution_time: int
+    ):
+        """Записує API виклик в базу даних."""
+        try:
+            # Імпортуємо необхідні модулі
+            import os
+            import sys
+
+            sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+            try:
+                from api.database import SessionLocal
+                from api.models import ApiCall
+            except ImportError:
+                print("⚠️ Не вдалося імпортувати модулі для запису API викликів")
+                return
+
+            import uuid
+            from datetime import datetime
+
+            # Отримуємо user_id та swagger_spec_id з контексту
+            user_id = getattr(self, "user_id", "default_user")
+            swagger_spec_id = getattr(self, "swagger_spec_id", None)
+
+            if not swagger_spec_id:
+                # Спробуємо отримати з URL
+                url = api_request.get("url", "")
+                if "api-service" in url:
+                    swagger_spec_id = "api-service"
+
+            # Створюємо запис про API виклик
+            api_call = ApiCall(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                swagger_spec_id=swagger_spec_id or "unknown",
+                endpoint_path=api_request.get("url", ""),
+                method=api_request.get("method", "GET"),
+                request_data=api_request,
+                response_data=api_response,
+                status_code=api_response.get("status_code"),
+                execution_time=execution_time,
+                created_at=datetime.now(),
+            )
+
+            # Зберігаємо в базу даних
+            db = SessionLocal()
+            try:
+                db.add(api_call)
+                db.commit()
+                print(
+                    f"✅ Записано API виклик: {api_request.get('method')} {api_request.get('url')}"
+                )
+            except Exception as e:
+                print(f"❌ Помилка запису API виклику: {e}")
+                db.rollback()
+            finally:
+                db.close()
+
+        except Exception as e:
+            print(f"❌ Помилка запису API виклику: {e}")
 
     def _format_response(
         self,
@@ -809,7 +961,7 @@ class InteractiveSwaggerAgent:
             user_query = self._get_last_user_query()
 
             # Генеруємо промпт для обробки відповіді
-            processing_prompt = PromptTemplates.get_api_response_processing_prompt(
+            processing_prompt = self.prompt_manager.get_api_response_processing_prompt(
                 user_query=user_query,
                 api_response=api_response,
                 available_fields=self._extract_available_fields(api_response),
@@ -851,7 +1003,7 @@ class InteractiveSwaggerAgent:
             conversation_history = self.conversation_history.load_conversation(user_identifier)
 
             # Генеруємо промпт для створення об'єкта
-            creation_prompt = PromptTemplates.get_object_creation_prompt(
+            creation_prompt = self.prompt_manager.get_object_creation_prompt(
                 user_query=user_query,
                 endpoint_info=endpoint_info,
                 conversation_history=conversation_history,

@@ -16,7 +16,7 @@ os.environ["DATABASE_URL"] = "postgresql://postgres:postgres@127.0.0.1:5432/ai_s
 
 from src.config import Config
 from src.postgres_vector_manager import PostgresVectorManager
-from src.rag_engine import RAGEngine
+from src.rag_engine import PostgresRAGEngine
 
 # Налаштовуємо логування
 logging.basicConfig(level=logging.INFO)
@@ -32,23 +32,19 @@ def migrate_chromadb_to_pgvector():
         pg_manager = PostgresVectorManager()
 
         # Створюємо ChromaDB RAG Engine для читання даних
-        chroma_rag = RAGEngine(
-            swagger_spec_path=Config.SWAGGER_SPEC_PATH, persist_directory=Config.CHROMA_DB_PATH
-        )
+        chroma_rag = PostgresRAGEngine(user_id="migrate_user", swagger_spec_id="migrate_spec")
 
         # Отримуємо всі дані з ChromaDB
         print("📖 Читаємо дані з ChromaDB...")
 
         # Створюємо новий RAG Engine з ChromaDB для експорту
-        from src.rag_engine import RAGEngine as ChromaRAGEngine
+        from src.rag_engine import PostgresRAGEngine as ChromaRAGEngine
 
         # Тимчасово вимикаємо pgvector
         original_use_pgvector = Config.USE_PGVECTOR
         Config.USE_PGVECTOR = False
 
-        chroma_engine = ChromaRAGEngine(
-            swagger_spec_path=Config.SWAGGER_SPEC_PATH, persist_directory=Config.CHROMA_DB_PATH
-        )
+        chroma_engine = ChromaRAGEngine(user_id="migrate_user", swagger_spec_id="migrate_spec")
 
         # Отримуємо всі endpoints
         all_endpoints = chroma_engine.vectorstore.get()

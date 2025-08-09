@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 from .enhanced_prompt_manager import EnhancedPromptManager
-from .rag_engine import RAGEngine
+from .rag_engine import PostgresRAGEngine
 from .swagger_validation_prompt import SwaggerValidationPrompt
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ class EnhancedAIAssistant:
     Розширений AI-асистент з додатковими функціями для веб-сайтів
     """
 
-    def __init__(self, prompt_manager: EnhancedPromptManager, rag_engine: RAGEngine):
+    def __init__(self, prompt_manager: EnhancedPromptManager, rag_engine: PostgresRAGEngine):
         self.prompt_manager = prompt_manager
         self.rag_engine = rag_engine
         self.user_profiles = {}

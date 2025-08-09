@@ -305,7 +305,7 @@ CREATE TABLE api_embeddings (
     method VARCHAR(10) NOT NULL,
     description TEXT NOT NULL,
     embedding TEXT NOT NULL,
-    metadata JSONB,
+    embedding_metadata JSONB,
     created_at TIMESTAMP DEFAULT NOW(),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (swagger_spec_id) REFERENCES swagger_specs(id) ON DELETE CASCADE,

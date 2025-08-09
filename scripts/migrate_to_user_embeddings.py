@@ -130,7 +130,7 @@ def migrate_existing_embeddings():
                                 "method": row[2],
                                 "description": row[3],
                                 "embedding": embedding_json,
-                                "metadata": json.dumps(row[5]) if row[5] else None,
+                                "embedding_metadata": json.dumps(row[5]) if row[5] else None,
                                 "created_at": (
                                     row[6].isoformat() if row[6] else datetime.now().isoformat()
                                 ),

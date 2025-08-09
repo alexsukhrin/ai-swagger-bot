@@ -53,6 +53,45 @@ test-coverage: ## Run tests with coverage
 test-clean: ## Clear pytest cache and run tests
 	python -m pytest tests/ -v --tb=short --cache-clear
 
+# Інтеграційні тести в Docker
+test-integration: ## Run database integration tests in Docker
+	@echo "🐳 Запуск інтеграційних тестів в Docker..."
+	docker-compose -f docker-compose.integration.yml up --build integration-tests --exit-code-from integration-tests
+
+test-integration-full: ## Run full integration test suite in Docker
+	@echo "🐳 Запуск повних інтеграційних тестів в Docker..."
+	docker-compose -f docker-compose.integration.yml up --build full-integration-tests --exit-code-from full-integration-tests
+
+test-performance: ## Run database performance tests in Docker
+	@echo "🐳 Запуск тестів продуктивності в Docker..."
+	docker-compose -f docker-compose.integration.yml up --build performance-tests --exit-code-from performance-tests
+
+test-api-integration: ## Run API integration tests in Docker
+	@echo "🐳 Запуск API інтеграційних тестів в Docker..."
+	docker-compose -f docker-compose.integration.yml up --build api-integration-tests --exit-code-from api-integration-tests
+
+test-db-queries: ## Run database query tests locally
+	@echo "🔍 Запуск тестів запитів до бази даних..."
+	python -m pytest tests/test_database_queries.py -v --tb=short
+
+test-db-integration: ## Run database integration tests locally
+	@echo "🔍 Запуск інтеграційних тестів бази даних..."
+	python -m pytest tests/test_database_integration.py -v --tb=short
+
+test-db-all: ## Run all database tests
+	@echo "🔍 Запуск всіх тестів бази даних..."
+	python -m pytest tests/test_database_integration.py tests/test_database_queries.py -v --tb=short
+
+# Docker тести
+docker-test-integration: ## Run integration tests in Docker (with database)
+	@echo "🐳 Запуск інтеграційних тестів в Docker..."
+	docker-compose -f docker-compose.integration.yml up --build --abort-on-container-exit
+
+docker-test-clean: ## Clean up test containers and volumes
+	@echo "🧹 Очищення тестових контейнерів..."
+	docker-compose -f docker-compose.integration.yml down -v
+	docker-compose -f docker-compose.test.yml down -v
+
 run: ## Запустити Streamlit додаток
 	@echo "🌐 Запуск Streamlit додатку..."
 	$(PYTHON_VENV) -m streamlit run app.py

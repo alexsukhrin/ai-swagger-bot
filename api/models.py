@@ -112,7 +112,7 @@ class ApiEmbedding(Base):
     method = Column(String(10), nullable=False)
     description = Column(Text, nullable=False)
     embedding = Column(Text, nullable=False)  # JSON string з вектором
-    metadata = Column(JSON, nullable=True)
+    embedding_metadata = Column(JSON, nullable=True)  # Метадані для embedding
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -243,6 +243,12 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class UserCreate(BaseModel):
+    email: str
+    username: str
+    password: str
+
+
 class ApiTokenResponse(BaseModel):
     id: str
     token_name: str
@@ -301,6 +307,14 @@ class PromptTemplateResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class PromptTemplateCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    template: str
+    category: str
+    is_public: bool = False
 
 
 class ApiEmbeddingResponse(BaseModel):

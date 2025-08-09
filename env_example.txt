@@ -34,6 +34,9 @@ DATABASE_URL=postgresql://postgres:postgres@db:5432/ai_swagger_bot
 # Налаштування JWT
 JWT_SECRET_KEY=your_jwt_secret_key_here
 
+# Налаштування шифрування токенів
+TOKEN_ENCRYPTION_KEY=your_token_encryption_key_here
+
 # Налаштування API
 API_BASE_URL=http://api:8000
 

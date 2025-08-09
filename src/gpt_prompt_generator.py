@@ -192,8 +192,19 @@ class GPTPromptGenerator:
 }
 """
 
+        # Отримуємо інформацію про API
+        info = swagger_data.get("info", {})
+        servers = swagger_data.get("servers", [])
+        base_url = servers[0].get("url", "") if servers else ""
+
         user_prompt = f"""
 Створи промпт для наступного API endpoint:
+
+API ІНФОРМАЦІЯ:
+- Назва: {info.get('title', 'Unknown API')}
+- Версія: {info.get('version', 'Unknown')}
+- Опис: {info.get('description', 'Немає опису')}
+- Base URL: {base_url}
 
 ENDPOINT: {endpoint_info['method']} {endpoint_info['path']}
 РЕСУРС: {endpoint_info['resource_type']}
@@ -211,7 +222,9 @@ ENDPOINT: {endpoint_info['method']} {endpoint_info['path']}
 СХЕМА ВІДПОВІДІ:
 {json.dumps(endpoint_info['response_schema'], indent=2, ensure_ascii=False) if endpoint_info['response_schema'] else 'Немає схеми відповіді'}
 
-Створи корисний промпт для чат-бота, який допоможе користувачам взаємодіяти з цим endpoint через природну мову.
+ВАЖЛИВО: Поверни ТІЛЬКИ JSON без markdown форматування.
+
+Створи корисний промпт для чат-бота, який допоможе користувачам взаємодіяти з цим endpoint через природну мову. Промпт повинен бути специфічним для цього API та endpoint.
 """
 
         try:
@@ -337,10 +350,39 @@ ENDPOINT: {endpoint_info['method']} {endpoint_info['path']}
 Промпт повинен бути універсальним та покривати всі основні операції з ресурсом.
 """
 
+        # Отримуємо інформацію про API
+        info = swagger_data.get("info", {})
+        paths = swagger_data.get("paths", {})
+
+        # Збираємо endpoints для цього ресурсу
+        resource_endpoints = []
+        for path, methods in paths.items():
+            if self._detect_resource_type(path) == resource_type:
+                for method, method_data in methods.items():
+                    if isinstance(method_data, dict):
+                        resource_endpoints.append(
+                            {
+                                "path": path,
+                                "method": method.upper(),
+                                "summary": method_data.get("summary", ""),
+                                "operation_id": method_data.get("operationId", ""),
+                            }
+                        )
+
         user_prompt = f"""
 Створи загальний промпт для роботи з ресурсом типу: {resource_type}
 
+API ІНФОРМАЦІЯ:
+- Назва: {info.get('title', 'Unknown API')}
+- Версія: {info.get('version', 'Unknown')}
+- Опис: {info.get('description', 'Немає опису')}
+
+ДОСТУПНІ ENDPOINTS ДЛЯ {resource_type.upper()}:
+{chr(10).join([f"- {ep['method']} {ep['path']}: {ep['summary']}" for ep in resource_endpoints[:5]])}
+
 Цей промпт повинен допомагати користувачам взаємодіяти з API для {resource_type} через природну мову.
+
+ВАЖЛИВО: Поверни ТІЛЬКИ JSON без markdown форматування.
 
 Відповідай у форматі JSON:
 {{
@@ -411,20 +453,54 @@ ENDPOINT: {endpoint_info['method']} {endpoint_info['path']}
 
         # Аналізуємо API та створюємо підказки
         paths = swagger_data.get("paths", {})
+        info = swagger_data.get("info", {})
         resources = set()
 
-        for path in paths.keys():
+        # Збираємо детальну інформацію про endpoints
+        endpoints_info = []
+        for path, methods in paths.items():
             resource_type = self._detect_resource_type(path)
             if resource_type != "custom":
                 resources.add(resource_type)
 
+            for method, method_data in methods.items():
+                if isinstance(method_data, dict):
+                    summary = method_data.get("summary", "")
+                    description = method_data.get("description", "")
+                    tags = method_data.get("tags", [])
+
+                    endpoints_info.append(
+                        {
+                            "path": path,
+                            "method": method.upper(),
+                            "summary": summary,
+                            "description": description,
+                            "tags": tags,
+                        }
+                    )
+
+        # Формуємо детальний опис API
+        api_description = f"""
+API: {info.get('title', 'Unknown API')}
+Версія: {info.get('version', 'Unknown')}
+Опис: {info.get('description', 'Немає опису')}
+Base URL: {swagger_data.get('servers', [{}])[0].get('url', 'Unknown') if swagger_data.get('servers') else 'Unknown'}
+"""
+
         user_prompt = f"""
 На основі наступного API створіть корисні підказки для користувачів:
 
-ДОСТУПНІ РЕСУРСИ: {list(resources)}
-ENDPOINTS: {list(paths.keys())}
+{api_description}
 
-Створи 10-15 практичних підказок у форматі JSON:
+ДОСТУПНІ РЕСУРСИ: {list(resources)}
+КІЛЬКІСТЬ ENDPOINTS: {len(endpoints_info)}
+
+ПРИКЛАДИ ENDPOINTS:
+{chr(10).join([f"- {ep['method']} {ep['path']}: {ep['summary']}" for ep in endpoints_info[:10]])}
+
+ВАЖЛИВО: Поверни ТІЛЬКИ JSON без markdown форматування або додаткового тексту.
+
+Створи 10-15 практичних підказок у форматі JSON, які будуть специфічними для цього API:
 {{
     "suggestions": [
         {{
@@ -432,7 +508,8 @@ ENDPOINTS: {list(paths.keys())}
             "title": "Назва підказки",
             "description": "Опис підказки",
             "example_query": "Приклад запиту",
-            "difficulty": "easy/medium/hard"
+            "difficulty": "easy/medium/hard",
+            "related_endpoints": ["список пов'язаних endpoints"]
         }}
     ]
 }}
@@ -452,11 +529,22 @@ ENDPOINTS: {list(paths.keys())}
             gpt_response = response.choices[0].message.content
 
             try:
+                # Спробуємо витягти JSON з markdown коду
+                if "```json" in gpt_response:
+                    start = gpt_response.find("```json") + 7
+                    end = gpt_response.find("```", start)
+                    if end != -1:
+                        json_str = gpt_response[start:end].strip()
+                        parsed_response = json.loads(json_str)
+                        return parsed_response.get("suggestions", [])
+
+                # Спробуємо звичайний JSON
                 parsed_response = json.loads(gpt_response)
                 return parsed_response.get("suggestions", [])
 
             except json.JSONDecodeError:
                 print("⚠️ Помилка парсингу підказок від GPT")
+                print(f"   Отримана відповідь: {gpt_response[:200]}...")
                 return []
 
         except Exception as e:
