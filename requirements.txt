@@ -24,5 +24,5 @@ requests==2.31.0
 sqladmin==0.17.0
 sqlalchemy==2.0.36
 streamlit==1.28.1
-typing-extensions==4.8.0
+typing-extensions==4.14.1
 uvicorn[standard]==0.32.1
