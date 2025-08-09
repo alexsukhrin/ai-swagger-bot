@@ -23,11 +23,19 @@ logger = logging.getLogger(__name__)
 class EmbeddingTask:
     """Завдання для створення embeddings"""
 
-    def __init__(self, task_id: str, user_id: str, swagger_spec_id: str, swagger_data: dict):
+    def __init__(
+        self,
+        task_id: str,
+        user_id: str,
+        swagger_spec_id: str,
+        swagger_data: dict,
+        enable_gpt_enhancement: bool = True,
+    ):
         self.task_id = task_id
         self.user_id = user_id
         self.swagger_spec_id = swagger_spec_id
         self.swagger_data = swagger_data
+        self.enable_gpt_enhancement = enable_gpt_enhancement  # Нове поле для GPT
         self.status = "pending"  # pending, processing, completed, failed
         self.created_at = datetime.now()
         self.started_at: Optional[datetime] = None
@@ -45,14 +53,22 @@ class QueueManager:
         self.worker_thread: Optional[threading.Thread] = None
         self._lock = threading.Lock()
 
-    def add_task(self, user_id: str, swagger_spec_id: str, swagger_data: dict) -> str:
+    def add_task(
+        self,
+        user_id: str,
+        swagger_spec_id: str,
+        swagger_data: dict,
+        enable_gpt_enhancement: bool = True,
+    ) -> str:
         """Додає нове завдання в чергу"""
         task_id = str(uuid4())
 
         with self._lock:
-            task = EmbeddingTask(task_id, user_id, swagger_spec_id, swagger_data)
+            task = EmbeddingTask(
+                task_id, user_id, swagger_spec_id, swagger_data, enable_gpt_enhancement
+            )
             self.tasks[task_id] = task
-            logger.info(f"📋 Додано завдання {task_id} для користувача {user_id}")
+            logger.info(f"📋 Додано завдання {task_id} для користувача {user_id} з GPT покращенням")
 
             # Запускаємо worker якщо він не працює
             if not self.processing:
@@ -151,8 +167,10 @@ class QueueManager:
                 # Оновлюємо прогрес
                 task.progress = 25
 
-                # Створюємо embeddings
-                success = rag_engine.create_vectorstore_from_swagger(temp_file_path)
+                # Створюємо embeddings з GPT enhancement
+                success = rag_engine.create_vectorstore_from_swagger(
+                    temp_file_path, enable_gpt_enhancement=task.enable_gpt_enhancement
+                )
 
                 task.progress = 100
 

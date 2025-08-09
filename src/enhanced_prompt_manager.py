@@ -175,6 +175,7 @@ class EnhancedPromptManager:
         return self.yaml_manager.format_prompt(
             "api_response_processing_base",
             user_query=user_query,
+            processing_type="standard",  # Додаємо відсутню змінну
             api_response=json.dumps(api_response, ensure_ascii=False, indent=2),
             available_fields=json.dumps(available_fields or [], ensure_ascii=False, indent=2),
         )
