@@ -9,7 +9,15 @@ from sqladmin import Admin, ModelView
 from sqlalchemy.orm import Session
 
 from .database import engine
-from .models import ApiCall, ChatMessage, ChatSession, PromptTemplate, SwaggerSpec, User
+from .models import (
+    ApiCall,
+    ApiEmbedding,
+    ChatMessage,
+    ChatSession,
+    PromptTemplate,
+    SwaggerSpec,
+    User,
+)
 
 
 class UserAdmin(ModelView, model=User):
@@ -52,6 +60,7 @@ class SwaggerSpecAdmin(ModelView, model=SwaggerSpec):
         SwaggerSpec.filename,
         SwaggerSpec.endpoints_count,
         SwaggerSpec.user_id,
+        SwaggerSpec.jwt_token,
         SwaggerSpec.is_active,
         SwaggerSpec.created_at,
     ]
@@ -66,6 +75,15 @@ class SwaggerSpecAdmin(ModelView, model=SwaggerSpec):
     can_view_details = True
 
     form_excluded_columns = ["original_data", "parsed_data"]
+
+    # Форматируем JWT токен (показываем только начало)
+    column_formatters = {
+        SwaggerSpec.jwt_token: lambda m, a: (
+            m.jwt_token[:20] + "..."
+            if m.jwt_token and len(m.jwt_token) > 20
+            else (m.jwt_token or "Not set")
+        )
+    }
 
 
 class ChatSessionAdmin(ModelView, model=ChatSession):
@@ -165,6 +183,46 @@ class PromptTemplateAdmin(ModelView, model=PromptTemplate):
     can_view_details = True
 
 
+class ApiEmbeddingAdmin(ModelView, model=ApiEmbedding):
+    """Адмін панель для API embeddings"""
+
+    name = "API Embedding"
+    name_plural = "API Embeddings"
+    icon = "fa-solid fa-vector-square"
+
+    column_list = [
+        ApiEmbedding.id,
+        ApiEmbedding.user_id,
+        ApiEmbedding.swagger_spec_id,
+        ApiEmbedding.endpoint_path,
+        ApiEmbedding.method,
+        ApiEmbedding.created_at,
+    ]
+    column_searchable_list = [
+        ApiEmbedding.endpoint_path,
+        ApiEmbedding.method,
+        ApiEmbedding.description,
+    ]
+    column_sortable_list = [ApiEmbedding.created_at, ApiEmbedding.method]
+    column_filters = [ApiEmbedding.user_id, ApiEmbedding.swagger_spec_id, ApiEmbedding.method]
+    column_default_sort = ("created_at", True)
+
+    can_create = False  # Embeddings створюються автоматично
+    can_edit = False
+    can_delete = True
+    can_view_details = True
+
+    # Скрываем большие поля
+    form_excluded_columns = ["embedding", "embedding_metadata"]
+
+    # Форматируем отображение описания
+    column_formatters = {
+        ApiEmbedding.description: lambda m, a: (
+            m.description[:100] + "..." if len(m.description) > 100 else m.description
+        )
+    }
+
+
 class APICallAdmin(ModelView, model=ApiCall):
     """Адмін панель для API викликів"""
 
@@ -202,6 +260,7 @@ def setup_admin(app):
     admin.add_view(ChatSessionAdmin)
     admin.add_view(ChatMessageAdmin)
     admin.add_view(PromptTemplateAdmin)
+    admin.add_view(ApiEmbeddingAdmin)
     admin.add_view(APICallAdmin)
 
     return admin
