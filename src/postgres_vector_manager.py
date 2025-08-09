@@ -269,9 +269,10 @@ class PostgresVectorManager:
         try:
             query_embedding_json = json.dumps(query_embedding)
 
-            # Базовий запит з фільтрацією по користувачу
-            base_query = """
-                SELECT id, endpoint_path, method, description, embedding, embedding_metadata, created_at
+            # Запит з векторним пошуком за косинусною схожістю
+            base_query = f"""
+                SELECT id, endpoint_path, method, description, embedding, embedding_metadata, created_at,
+                       1 - (embedding <=> '{query_embedding_json}'::vector) as similarity
                 FROM api_embeddings
                 WHERE user_id = :user_id
             """
@@ -283,8 +284,8 @@ class PostgresVectorManager:
                 base_query += " AND swagger_spec_id = :swagger_spec_id"
                 params["swagger_spec_id"] = swagger_spec_id
 
-            # Додаємо сортування по даті створення (найновіші спочатку)
-            base_query += " ORDER BY created_at DESC LIMIT :limit"
+            # Сортуємо по схожості (найбільш схожі спочатку)
+            base_query += " ORDER BY similarity DESC LIMIT :limit"
             params["limit"] = limit
 
             with self.engine.connect() as conn:
@@ -293,8 +294,23 @@ class PostgresVectorManager:
 
                 results = []
                 for row in rows:
-                    # Конвертуємо JSON string назад в список
-                    embedding = json.loads(row[4]) if row[4] else []
+                    # Конвертуємо JSON string назад в список, або використовуємо як є, якщо вже dict/list
+                    if row[4]:
+                        if isinstance(row[4], str):
+                            embedding = json.loads(row[4])
+                        else:
+                            embedding = row[4]  # Вже список або dict
+                    else:
+                        embedding = []
+
+                    # Аналогічно для metadata
+                    if row[5]:
+                        if isinstance(row[5], str):
+                            metadata = json.loads(row[5])
+                        else:
+                            metadata = row[5]  # Вже dict
+                    else:
+                        metadata = {}
 
                     results.append(
                         {
@@ -303,8 +319,9 @@ class PostgresVectorManager:
                             "method": row[2],
                             "description": row[3],
                             "embedding": embedding,
-                            "metadata": json.loads(row[5]) if row[5] else {},
+                            "metadata": metadata,
                             "created_at": row[6],
+                            "similarity": float(row[7]) if row[7] is not None else 0.0,
                         }
                     )
 
@@ -348,7 +365,23 @@ class PostgresVectorManager:
 
                 results = []
                 for row in rows:
-                    embedding = json.loads(row[4]) if row[4] else []
+                    # Конвертуємо JSON string назад в список, або використовуємо як є, якщо вже dict/list
+                    if row[4]:
+                        if isinstance(row[4], str):
+                            embedding = json.loads(row[4])
+                        else:
+                            embedding = row[4]  # Вже список або dict
+                    else:
+                        embedding = []
+
+                    # Аналогічно для metadata
+                    if row[5]:
+                        if isinstance(row[5], str):
+                            metadata = json.loads(row[5])
+                        else:
+                            metadata = row[5]  # Вже dict
+                    else:
+                        metadata = {}
 
                     results.append(
                         {
@@ -357,7 +390,7 @@ class PostgresVectorManager:
                             "method": row[2],
                             "description": row[3],
                             "embedding": embedding,
-                            "metadata": json.loads(row[5]) if row[5] else {},
+                            "metadata": metadata,
                             "created_at": row[6],
                         }
                     )

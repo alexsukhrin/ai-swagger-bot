@@ -15,7 +15,72 @@ from sqlalchemy.orm import Session
 from src.config import Config
 
 from .database import get_db
-from .models import PromptTemplate, User, UserCreate, UserResponse
+from .models import PromptTemplate, User, UserCreate
+
+
+def load_base_prompts_for_user(db: Session, user_id: str) -> bool:
+    """Загружает базовые промпты для пользователя из YAML файла"""
+    try:
+        # Импортируем функцию безпосередньо
+        import os
+        from pathlib import Path
+
+        import yaml
+
+        # Шлях до YAML файлу з промптами
+        yaml_path = Path("prompts/base_prompts.yaml")
+
+        if not yaml_path.exists():
+            print("⚠️ Файл prompts/base_prompts.yaml не знайдено")
+            return False
+
+        with open(yaml_path, "r", encoding="utf-8") as file:
+            yaml_data = yaml.safe_load(file)
+
+        # Обробляємо промпти з секції prompts
+        prompts_data = yaml_data.get("prompts", {})
+        base_prompts = []
+
+        for prompt_id, prompt_data in prompts_data.items():
+            prompt = {
+                "name": prompt_data.get("name", ""),
+                "description": prompt_data.get("description", ""),
+                "template": prompt_data.get("template", ""),
+                "category": prompt_data.get("category", "general"),
+            }
+            base_prompts.append(prompt)
+
+        print(f"📋 Знайдено {len(base_prompts)} базових промптів")
+
+        for i, prompt_data in enumerate(base_prompts):
+            print(f"📝 Створюю промпт {i+1}/{len(base_prompts)}: {prompt_data['name']}")
+            # Створюємо копію промпту для користувача
+            user_prompt = PromptTemplate(
+                id=str(uuid.uuid4()),
+                user_id=user_id,  # Прив'язуємо до користувача
+                name=prompt_data["name"],
+                description=prompt_data["description"],
+                template=prompt_data["template"],
+                category=prompt_data["category"],
+                is_public=False,  # Промпти користувача не публічні
+                is_active=True,
+                usage_count=0,
+                success_rate=0,
+                created_at=datetime.now(),
+                updated_at=datetime.now(),
+            )
+            db.add(user_prompt)
+
+        print(f"✅ Створено {len(base_prompts)} базових промптів для користувача {user_id}")
+        return True
+
+    except Exception as e:
+        print(f"⚠️ Помилка завантаження базових промптів: {e}")
+        import traceback
+
+        traceback.print_exc()
+        return False
+
 
 # Налаштування
 config = Config()
@@ -98,77 +163,7 @@ def create_user(db: Session, user_create: UserCreate) -> User:
 
     # Завантажуємо базові промпти для користувача
     print(f"🔍 Завантажую базові промпти для користувача {user.id}")
-    try:
-        # Імпортуємо функцію безпосередньо
-        import os
-        from pathlib import Path
-
-        import yaml
-
-        # Шлях до YAML файлу з промптами
-        yaml_path = Path("prompts/base_prompts.yaml")
-
-        if not yaml_path.exists():
-            print("⚠️ Файл prompts/base_prompts.yaml не знайдено")
-            db.commit()
-            return user
-
-        with open(yaml_path, "r", encoding="utf-8") as file:
-            yaml_data = yaml.safe_load(file)
-
-        # Обробляємо промпти з секції prompts
-        prompts_data = yaml_data.get("prompts", {})
-        base_prompts = []
-
-        for prompt_id, prompt_data in prompts_data.items():
-            prompt = {
-                "id": str(uuid.uuid4()),
-                "name": prompt_data.get("name", ""),
-                "description": prompt_data.get("description", ""),
-                "template": prompt_data.get("template", ""),
-                "category": prompt_data.get("category", "general"),
-                "tags": prompt_data.get("tags", []),
-                "is_public": True,
-                "is_active": True,
-                "usage_count": 0,
-                "success_rate": 0,
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "source": "yaml_base",
-            }
-            base_prompts.append(prompt)
-
-        print(f"📋 Знайдено {len(base_prompts)} базових промптів")
-
-        for i, prompt_data in enumerate(base_prompts):
-            print(
-                f"📝 Створюю промпт {i+1}/{len(base_prompts)}: {prompt_data.get('name', 'Unknown')}"
-            )
-            # Створюємо копію промпту для користувача
-            user_prompt = PromptTemplate(
-                id=str(uuid.uuid4()),
-                user_id=user.id,  # Прив'язуємо до користувача
-                name=prompt_data["name"],
-                description=prompt_data["description"],
-                template=prompt_data["template"],
-                category=prompt_data["category"],
-                is_public=False,  # Промпти користувача не публічні
-                is_active=True,
-                usage_count=0,
-                success_rate=0,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-            db.add(user_prompt)
-
-        print(f"✅ Створено користувача {user.id} з {len(base_prompts)} базовими промптами")
-
-    except Exception as e:
-        print(f"⚠️ Помилка завантаження базових промптів: {e}")
-        import traceback
-
-        traceback.print_exc()
-        # Продовжуємо без промптів
+    load_base_prompts_for_user(db, user.id)
 
     # Комітуємо всі зміни
     db.commit()
@@ -205,80 +200,8 @@ def create_demo_user(db: Session) -> dict:
     db.refresh(user)
 
     # Завантажуємо базові промпти для користувача
-    print(f"🔍 ПОЧАТОК: Завантажую базові промпти для користувача {user.id}")
-    try:
-        # Імпортуємо функцію безпосередньо
-        import os
-        from pathlib import Path
-
-        import yaml
-
-        print(f"🔍 Імпорти успішні")
-
-        # Шлях до YAML файлу з промптами
-        yaml_path = Path("/app/prompts/base_prompts.yaml")
-
-        if not yaml_path.exists():
-            print("⚠️ Файл prompts/base_prompts.yaml не знайдено")
-            return result
-
-        with open(yaml_path, "r", encoding="utf-8") as file:
-            yaml_data = yaml.safe_load(file)
-
-        # Обробляємо промпти з секції prompts
-        prompts_data = yaml_data.get("prompts", {})
-        base_prompts = []
-
-        for prompt_id, prompt_data in prompts_data.items():
-            prompt = {
-                "id": str(uuid.uuid4()),
-                "name": prompt_data.get("name", ""),
-                "description": prompt_data.get("description", ""),
-                "template": prompt_data.get("template", ""),
-                "category": prompt_data.get("category", "general"),
-                "tags": prompt_data.get("tags", []),
-                "is_public": True,
-                "is_active": True,
-                "usage_count": 0,
-                "success_rate": 0,
-                "created_at": datetime.now(),
-                "updated_at": datetime.now(),
-                "source": "yaml_base",
-            }
-            base_prompts.append(prompt)
-
-        print(f"📋 Знайдено {len(base_prompts)} базових промптів")
-
-        for i, prompt_data in enumerate(base_prompts):
-            print(
-                f"📝 Створюю промпт {i+1}/{len(base_prompts)}: {prompt_data.get('name', 'Unknown')}"
-            )
-            # Створюємо копію промпту для користувача
-            user_prompt = PromptTemplate(
-                id=str(uuid.uuid4()),
-                user_id=user.id,  # Прив'язуємо до користувача
-                name=prompt_data["name"],
-                description=prompt_data["description"],
-                template=prompt_data["template"],
-                category=prompt_data["category"],
-                tags=prompt_data["tags"],
-                is_public=False,  # Промпти користувача не публічні
-                is_active=True,
-                usage_count=0,
-                success_rate=0,
-                created_at=datetime.now(),
-                updated_at=datetime.now(),
-            )
-            db.add(user_prompt)
-
-        print(f"✅ Створено користувача {user.id} з {len(base_prompts)} базовими промптами")
-
-    except Exception as e:
-        print(f"⚠️ Помилка завантаження базових промптів: {e}")
-        import traceback
-
-        traceback.print_exc()
-        # Продовжуємо без промптів
+    print(f"🔍 Завантажую базові промпти для користувача {user.id}")
+    load_base_prompts_for_user(db, user.id)
 
     # Комітуємо всі зміни
     db.commit()
