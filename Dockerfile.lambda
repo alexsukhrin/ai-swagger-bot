@@ -1,0 +1,31 @@
+# Dockerfile для AWS Lambda container image
+FROM public.ecr.aws/lambda/python:3.11
+
+# Встановлюємо системні залежності
+RUN yum update -y && \
+    yum install -y \
+    gcc \
+    gcc-c++ \
+    libffi-devel \
+    postgresql-devel \
+    && yum clean all
+
+# Копіюємо requirements.txt
+COPY requirements.txt ${LAMBDA_TASK_ROOT}
+
+# Встановлюємо Python залежності
+RUN pip install -r requirements.txt --target "${LAMBDA_TASK_ROOT}"
+
+# Копіюємо код додатку
+COPY api/ ${LAMBDA_TASK_ROOT}/api/
+COPY src/ ${LAMBDA_TASK_ROOT}/src/
+COPY lambda_handler.py ${LAMBDA_TASK_ROOT}
+
+# Створюємо директорію для логів
+RUN mkdir -p /tmp/logs
+
+# Встановлюємо права доступу
+RUN chmod 755 ${LAMBDA_TASK_ROOT}/lambda_handler.py
+
+# Встановлюємо handler
+CMD ["lambda_handler.handler"] 

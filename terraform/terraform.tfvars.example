@@ -1,0 +1,41 @@
+# Example terraform.tfvars file for AI Swagger Bot
+# Copy this file to terraform.tfvars and fill in your values
+
+# AWS Configuration
+aws_region = "us-east-1"
+environment = "dev"
+
+# Project Configuration
+project_name = "ai-swagger-bot"
+
+# VPC Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b"]
+private_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24"]
+public_subnet_cidrs = ["10.0.101.0/24", "10.0.102.0/24"]
+
+# Database Configuration
+database_instance_class = "db.t3.micro"
+database_allocated_storage = 20
+database_max_allocated_storage = 100
+database_name = "ai_swagger_bot"
+database_username = "postgres"
+database_password = "your-secure-password-here"
+
+# Lambda Configuration
+lambda_timeout = 30
+lambda_memory_size = 1024
+
+# Redis Configuration
+redis_node_type = "cache.t3.micro"
+
+# Application Configuration
+openai_api_key = "your-openai-api-key-here"
+jwt_secret_key = "your-jwt-secret-key-here"
+
+# Production overrides (uncomment and modify for production)
+# environment = "prod"
+# database_instance_class = "db.t3.small"
+# database_allocated_storage = 50
+# lambda_memory_size = 2048
+# redis_node_type = "cache.t3.small" 
