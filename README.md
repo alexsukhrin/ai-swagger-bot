@@ -27,6 +27,17 @@
 - ✅ **Система сповіщень** - статус замовлень, промо-акції, новинки
 - ✅ **Історія розмови** - збереження контексту для персоналізації
 
+### ☁️ Serverless Deployment
+- ✅ **AWS Lambda** - розгортання як серверлес функція
+- ✅ **Mangum** - адаптер для FastAPI на AWS Lambda
+- ✅ **Serverless Framework** - автоматизація розгортання
+- ✅ **Terraform** - Infrastructure as Code для AWS
+- ✅ **Docker** - контейнеризація для Lambda
+- ✅ **CI/CD** - GitHub Actions та GitLab CI
+- ✅ **Multi-stage** - dev, staging, production
+- ✅ **Auto-scaling** - автоматичне масштабування
+- ✅ **Monitoring** - CloudWatch, логування, метрики
+
 ## 🛠️ Встановлення
 
 ### 1. Клонування репозиторію
@@ -88,6 +99,27 @@ pre-commit install
 # Або використовуйте Makefile
 make pre-commit-install
 ```
+
+### 6. Serverless Deployment (опціонально)
+
+Для розгортання на AWS Lambda:
+
+```bash
+# Налаштування серверлес середовища
+./scripts/setup_serverless.sh
+
+# Або вручну
+npm install
+pip install -r requirements.txt
+
+# Розгортання на dev stage
+make -f Makefile.lambda deploy
+
+# Розгортання на production
+make -f Makefile.lambda deploy-prod
+```
+
+**Детальна документація**: [README_SERVERLESS.md](README_SERVERLESS.md)
 
 ## 🔧 Розробка
 
@@ -705,6 +737,51 @@ python cli.py --swagger examples/swagger_specs/shop_api.json --list-endpoints
 ---
 
 **AI Swagger Bot** - Робіть API простішими! 🚀
+
+## ☁️ Serverless Deployment
+
+### AWS Lambda з Mangum
+
+Проект підтримує розгортання як серверлес функція на AWS Lambda з використанням [Mangum](https://pypi.org/project/mangum/):
+
+```python
+from mangum import Mangum
+from api.main import app
+
+# Створюємо handler для AWS Lambda
+handler = Mangum(app, lifespan="off")
+```
+
+### Швидкий старт
+
+```bash
+# Налаштування
+./scripts/setup_serverless.sh
+
+# Розгортання
+make -f Makefile.lambda deploy
+
+# Тестування
+make -f Makefile.lambda test-local
+```
+
+### Компоненти
+
+- **`lambda_handler.py`** - AWS Lambda handler з Mangum
+- **`serverless.yml`** - Serverless Framework конфігурація
+- **`Dockerfile.lambda`** - Docker image для Lambda
+- **`terraform/`** - Infrastructure as Code
+- **CI/CD** - GitHub Actions та GitLab CI
+
+### Переваги
+
+- 🚀 **Auto-scaling** - автоматичне масштабування
+- 💰 **Pay-per-use** - плата тільки за використання
+- 🔒 **Security** - VPC, security groups, IAM roles
+- 📊 **Monitoring** - CloudWatch, логування, метрики
+- 🌍 **Multi-stage** - dev, staging, production
+
+**Детальна документація**: [README_SERVERLESS.md](README_SERVERLESS.md)
 
 ## 🗄️ Бази даних
 
