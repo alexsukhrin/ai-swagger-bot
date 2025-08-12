@@ -3,7 +3,7 @@
 # Removed bandit - using only black and isort
 # Code formatting and linting
 black==23.12.1
-coverage==7.4.1
+coverage==7.10.3
 
 # Debugging
 ipdb==0.13.13
