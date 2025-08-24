@@ -1,0 +1,145 @@
+# Serverless Framework Configuration for AI Swagger Bot
+# AWS Lambda + API Gateway + RDS
+
+service: ai-swagger-bot
+
+frameworkVersion: '3'
+
+provider:
+  name: aws
+  runtime: python3.9
+  region: us-east-1
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 30
+  environment:
+    STAGE: ${self:provider.stage}
+    REGION: ${self:provider.region}
+    OPENAI_API_KEY: ${env:OPENAI_API_KEY}
+    CLICKONE_JWT_TOKEN: ${env:CLICKONE_JWT_TOKEN}
+    DATABASE_URL: ${env:DATABASE_URL}
+    LOG_LEVEL: INFO
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: "arn:aws:logs:*:*:*"
+        - Effect: Allow
+          Action:
+            - rds:DescribeDBInstances
+            - rds:DescribeDBClusters
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - ec2:CreateNetworkInterface
+            - ec2:DescribeNetworkInterfaces
+            - ec2:DeleteNetworkInterface
+          Resource: "*"
+
+functions:
+  api:
+    handler: lambda_handler.handler
+    events:
+      - http:
+          path: /{proxy+}
+          method: ANY
+          cors: true
+    vpc:
+      securityGroupIds:
+        - sg-xxxxxxxxxxxxxxxxx
+      subnetIds:
+        - subnet-xxxxxxxxxxxxxxxxx
+        - subnet-xxxxxxxxxxxxxxxxx
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+    layer:
+      name: python-deps
+      description: Python dependencies for AI Swagger Bot
+    noDeploy:
+      - coverage
+      - pytest
+      - pytest-cov
+      - pytest-mock
+      - black
+      - flake8
+      - mypy
+    zip: true
+    slim: true
+    usePoetry: false
+    useStaticCache: true
+    useDownloadCache: true
+
+resources:
+  Resources:
+    # RDS Database (якщо потрібно)
+    # DatabaseInstance:
+    #   Type: AWS::RDS::DBInstance
+    #   Properties:
+    #     DBInstanceIdentifier: ${self:service}-${self:provider.stage}
+    #     DBInstanceClass: db.t3.micro
+    #     Engine: postgres
+    #     EngineVersion: '13.7'
+    #     AllocatedStorage: 20
+    #     StorageType: gp2
+    #     MasterUsername: admin
+    #     MasterUserPassword: ${env:DATABASE_PASSWORD}
+    #     VPCSecurityGroups:
+    #       - Ref: DatabaseSecurityGroup
+    #     DBSubnetGroupName: Ref: DatabaseSubnetGroup
+    #     BackupRetentionPeriod: 7
+    #     MultiAZ: false
+    #     PubliclyAccessible: false
+    #     DeletionProtection: false
+    #     Tags:
+    #       - Key: Name
+    #         Value: ${self:service}-${self:provider.stage}
+
+    # VPC Security Group
+    # DatabaseSecurityGroup:
+    #   Type: AWS::EC2::SecurityGroup
+    #   Properties:
+    #     GroupDescription: Security group for RDS database
+    #     VpcId: vpc-xxxxxxxxx
+    #     SecurityGroupIngress:
+    #       - IpProtocol: tcp
+    #         FromPort: 5432
+    #         ToPort: 5432
+    #         SourceSecurityGroupId: Ref: LambdaSecurityGroup
+
+    # Lambda Security Group
+    # LambdaSecurityGroup:
+    #   Type: AWS::EC2::SecurityGroup
+    #   Properties:
+    #     GroupDescription: Security group for Lambda function
+    #     VpcId: vpc-xxxxxxxxx
+    #     SecurityGroupEgress:
+    #       - IpProtocol: -1
+    #         CidrIp: 0.0.0.0/0
+
+  Outputs:
+    ApiGatewayRestApiId:
+      Description: "API Gateway REST API ID"
+      Value: "Ref: ApiGatewayRestApi"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiId
+
+    ApiGatewayRestApiRootResourceId:
+      Description: "API Gateway REST API Root Resource ID"
+      Value: "GetAtt: ApiGatewayRestApi.RootResourceId"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-ApiGatewayRestApiRootResourceId
+
+    LambdaFunctionArn:
+      Description: "Lambda Function ARN"
+      Value: "GetAtt: ApiLambdaFunction.Arn"
+      Export:
+        Name: ${self:service}-${self:provider.stage}-LambdaFunctionArn
