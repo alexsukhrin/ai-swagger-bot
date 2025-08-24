@@ -1,5 +1,5 @@
 """
-Розширений парсер Swagger специфікацій.
+Розширений парсер Swagger специфікацій для CLI версії.
 """
 
 import json
@@ -10,372 +10,258 @@ logger = logging.getLogger(__name__)
 
 
 class EnhancedSwaggerParser:
-    """Розширений парсер Swagger специфікацій."""
+    """Розширений парсер Swagger специфікацій для CLI версії."""
 
-    def __init__(self, swagger_spec_path: str = None):
-        """
-        Ініціалізація парсера.
-
-        Args:
-            swagger_spec_path: Шлях до Swagger файлу
-        """
-        self.swagger_spec_path = swagger_spec_path
+    def __init__(self):
+        """Ініціалізація парсера."""
         self.swagger_data = None
 
-        if swagger_spec_path:
-            self.load_swagger_spec()
-
-    def load_swagger_spec(self) -> None:
-        """Завантажує Swagger специфікацію з файлу."""
-        try:
-            with open(self.swagger_spec_path, "r", encoding="utf-8") as f:
-                self.swagger_data = json.load(f)
-            logger.info(f"✅ Завантажено Swagger специфікацію: {self.swagger_spec_path}")
-        except Exception as e:
-            logger.error(f"❌ Помилка завантаження Swagger специфікації: {e}")
-            raise
-
-    def parse_swagger_spec(self, swagger_data: dict) -> dict:
+    def parse_swagger(self, swagger_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Парсить Swagger специфікацію.
-
+        Парсить Swagger специфікацію та повертає список ендпоінтів.
+        
         Args:
             swagger_data: Дані Swagger специфікації
-
+            
         Returns:
-            Розпарсені дані
+            Список парсованих ендпоінтів
         """
         self.swagger_data = swagger_data
-
+        
         try:
+            logger.info("Парсинг Swagger специфікації...")
+            
             # Отримуємо base URL
-            base_url = self.get_base_url()
-
-            # Отримуємо endpoints
-            endpoints = self.get_endpoints()
-
+            base_url = self._get_base_url()
+            
+            # Отримуємо всі ендпоінти
+            endpoints = self._extract_endpoints(base_url)
+            
             # Отримуємо схеми
-            schemas = self.get_schemas()
-
-            # Отримуємо інформацію про API
-            api_info = self.get_api_info()
-
-            # Отримуємо security schemes
-            security_schemes = self.get_security_schemes()
-
-            parsed_data = {
-                "base_url": base_url,
-                "endpoints": endpoints,
-                "schemas": schemas,
-                "api_info": api_info,
-                "security_schemes": security_schemes,
-            }
-
-            logger.info(
-                f"✅ Розпарсено Swagger специфікацію: {len(endpoints)} endpoints, base_url: {base_url}"
-            )
-            return parsed_data
-
+            schemas = self._extract_schemas()
+            
+            # Збагачуємо ендпоінти інформацією про схеми
+            enriched_endpoints = self._enrich_endpoints_with_schemas(endpoints, schemas)
+            
+            logger.info(f"✅ Розпарсено {len(enriched_endpoints)} ендпоінтів")
+            return enriched_endpoints
+            
         except Exception as e:
             logger.error(f"❌ Помилка парсингу Swagger специфікації: {e}")
             raise
-
-    def get_base_url(self) -> Optional[str]:
-        """
-        Отримує base URL з Swagger специфікації.
-
-        Returns:
-            Base URL або None
-        """
+    
+    def _get_base_url(self) -> str:
+        """Отримує base URL з Swagger специфікації."""
         try:
-            if not self.swagger_data:
-                return None
-
             # Спробуємо отримати з servers
             servers = self.swagger_data.get("servers", [])
             if servers:
-                # Беремо перший сервер
                 server_url = servers[0].get("url", "")
                 if server_url:
-                    # Якщо URL відносний, додаємо протокол
-                    if server_url.startswith("/"):
-                        server_url = "https://localhost" + server_url
-                    elif not server_url.startswith(("http://", "https://")):
-                        server_url = "https://" + server_url
-                    return server_url
-
-            # Спробуємо отримати з host та schemes
-            host = self.swagger_data.get("host")
-            schemes = self.swagger_data.get("schemes", ["https"])
-
+                    return server_url.rstrip('/')
+            
+            # Якщо немає servers, використовуємо host + basePath
+            host = self.swagger_data.get("host", "")
+            base_path = self.swagger_data.get("basePath", "")
+            
             if host:
-                scheme = schemes[0] if schemes else "https"
-                base_path = self.swagger_data.get("basePath", "")
-                return f"{scheme}://{host}{base_path}"
-
-            # Спробуємо отримати з info.x-* поля
-            info = self.swagger_data.get("info", {})
-            for key, value in info.items():
-                if key.startswith("x-") and "url" in key.lower():
-                    if isinstance(value, str) and value:
-                        return value
-
-            logger.warning("⚠️ Не вдалося визначити base URL з Swagger специфікації")
-            return None
-
+                protocol = "https" if "https" in host else "http"
+                if not host.startswith(("http://", "https://")):
+                    host = f"{protocol}://{host}"
+                return f"{host}{base_path}".rstrip('/')
+            
+            return ""
+            
         except Exception as e:
-            logger.error(f"❌ Помилка отримання base URL: {e}")
-            return None
-
-    def get_endpoints(self) -> List[Dict[str, Any]]:
-        """
-        Отримує список endpoints з Swagger специфікації.
-
-        Returns:
-            Список endpoints
-        """
+            logger.warning(f"Не вдалося отримати base URL: {e}")
+            return ""
+    
+    def _extract_endpoints(self, base_url: str) -> List[Dict[str, Any]]:
+        """Витягує всі ендпоінти з Swagger специфікації."""
         endpoints = []
-
+        
         try:
             paths = self.swagger_data.get("paths", {})
-
-            for path, path_data in paths.items():
-                for method, method_data in path_data.items():
-                    if method.upper() in [
-                        "GET",
-                        "POST",
-                        "PUT",
-                        "DELETE",
-                        "PATCH",
-                        "HEAD",
-                        "OPTIONS",
-                    ]:
-                        endpoint = {
-                            "path": path,
-                            "method": method.upper(),
-                            "summary": method_data.get("summary", ""),
-                            "description": method_data.get("description", ""),
-                            "operation_id": method_data.get("operationId", ""),
-                            "tags": method_data.get("tags", []),
-                            "parameters": self._parse_parameters(method_data.get("parameters", [])),
-                            "responses": self._parse_responses(method_data.get("responses", {})),
-                            "security": method_data.get("security", []),
-                            "deprecated": method_data.get("deprecated", False),
-                        }
-                        endpoints.append(endpoint)
-
+            
+            for path, path_item in paths.items():
+                # Обробляємо кожен HTTP метод
+                for method, operation in path_item.items():
+                    if method.upper() in ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]:
+                        endpoint = self._parse_operation(path, method, operation, base_url)
+                        if endpoint:
+                            endpoints.append(endpoint)
+            
             return endpoints
-
+            
         except Exception as e:
-            logger.error(f"❌ Помилка отримання endpoints: {e}")
+            logger.error(f"Помилка витягування ендпоінтів: {e}")
             return []
-
-    def _parse_parameters(self, parameters: List[Dict]) -> List[Dict]:
-        """Парсить параметри endpoint."""
-        parsed_params = []
-
+    
+    def _parse_operation(self, path: str, method: str, operation: Dict[str, Any], base_url: str) -> Optional[Dict[str, Any]]:
+        """Парсить окрему операцію (ендпоінт)."""
+        try:
+            # Отримуємо основну інформацію
+            summary = operation.get("summary", "")
+            description = operation.get("description", "")
+            operation_id = operation.get("operationId", "")
+            tags = operation.get("tags", [])
+            
+            # Отримуємо параметри
+            parameters = self._extract_parameters(operation.get("parameters", []))
+            
+            # Отримуємо відповіді
+            responses = self._extract_responses(operation.get("responses", {}))
+            
+            # Отримуємо request body
+            request_body = self._extract_request_body(operation.get("requestBody", {}))
+            
+            # Формуємо повний URL
+            full_url = f"{base_url}{path}" if base_url else path
+            
+            endpoint = {
+                "path": path,
+                "method": method.upper(),
+                "full_url": full_url,
+                "summary": summary,
+                "description": description,
+                "operation_id": operation_id,
+                "tags": tags,
+                "parameters": parameters,
+                "responses": responses,
+                "request_body": request_body,
+                "security": operation.get("security", []),
+                "deprecated": operation.get("deprecated", False)
+            }
+            
+            return endpoint
+            
+        except Exception as e:
+            logger.warning(f"Помилка парсингу операції {method} {path}: {e}")
+            return None
+    
+    def _extract_parameters(self, parameters: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Витягує параметри ендпоінту."""
+        extracted_params = []
+        
         for param in parameters:
-            parsed_param = {
-                "name": param.get("name", ""),
-                "in": param.get("in", ""),
-                "required": param.get("required", False),
-                "type": param.get("type", ""),
-                "description": param.get("description", ""),
-                "schema": param.get("schema", {}),
+            try:
+                param_info = {
+                    "name": param.get("name", ""),
+                    "in": param.get("in", ""),
+                    "required": param.get("required", False),
+                    "type": param.get("type", ""),
+                    "description": param.get("description", ""),
+                    "example": param.get("example", ""),
+                    "schema": param.get("schema", {})
+                }
+                extracted_params.append(param_info)
+            except Exception as e:
+                logger.warning(f"Помилка парсингу параметра: {e}")
+                continue
+        
+        return extracted_params
+    
+    def _extract_responses(self, responses: Dict[str, Any]) -> Dict[str, Any]:
+        """Витягує відповіді ендпоінту."""
+        extracted_responses = {}
+        
+        for status_code, response in responses.items():
+            try:
+                response_info = {
+                    "description": response.get("description", ""),
+                    "content": response.get("content", {}),
+                    "headers": response.get("headers", {}),
+                    "schema": response.get("schema", {})
+                }
+                extracted_responses[status_code] = response_info
+            except Exception as e:
+                logger.warning(f"Помилка парсингу відповіді {status_code}: {e}")
+                continue
+        
+        return extracted_responses
+    
+    def _extract_request_body(self, request_body: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Витягує request body ендпоінту."""
+        if not request_body:
+            return None
+        
+        try:
+            return {
+                "required": request_body.get("required", False),
+                "description": request_body.get("description", ""),
+                "content": request_body.get("content", {})
             }
-            parsed_params.append(parsed_param)
-
-        return parsed_params
-
-    def _parse_responses(self, responses: Dict) -> List[Dict]:
-        """Парсить відповіді endpoint."""
-        parsed_responses = []
-
-        for status_code, response_data in responses.items():
-            parsed_response = {
-                "status_code": status_code,
-                "description": response_data.get("description", ""),
-                "schema": response_data.get("schema", {}),
-                "headers": response_data.get("headers", {}),
-            }
-            parsed_responses.append(parsed_response)
-
-        return parsed_responses
-
-    def get_schemas(self) -> Dict[str, Any]:
-        """
-        Отримує схеми з Swagger специфікації.
-
-        Returns:
-            Словник схем
-        """
+        except Exception as e:
+            logger.warning(f"Помилка парсингу request body: {e}")
+            return None
+    
+    def _extract_schemas(self) -> Dict[str, Any]:
+        """Витягує схеми з Swagger специфікації."""
         try:
             components = self.swagger_data.get("components", {})
             schemas = components.get("schemas", {})
-
-            # Парсимо схеми
-            parsed_schemas = {}
-            for schema_name, schema_data in schemas.items():
-                parsed_schema = {
-                    "type": schema_data.get("type", ""),
-                    "properties": schema_data.get("properties", {}),
-                    "required": schema_data.get("required", []),
-                    "description": schema_data.get("description", ""),
-                    "example": schema_data.get("example", {}),
-                }
-                parsed_schemas[schema_name] = parsed_schema
-
-            return parsed_schemas
-
+            
+            extracted_schemas = {}
+            for schema_name, schema in schemas.items():
+                try:
+                    schema_info = {
+                        "type": schema.get("type", ""),
+                        "description": schema.get("description", ""),
+                        "properties": schema.get("properties", {}),
+                        "required": schema.get("required", []),
+                        "example": schema.get("example", {}),
+                        "enum": schema.get("enum", [])
+                    }
+                    extracted_schemas[schema_name] = schema_info
+                except Exception as e:
+                    logger.warning(f"Помилка парсингу схеми {schema_name}: {e}")
+                    continue
+            
+            return extracted_schemas
+            
         except Exception as e:
-            logger.error(f"❌ Помилка отримання схем: {e}")
+            logger.warning(f"Помилка витягування схем: {e}")
             return {}
-
-    def get_api_info(self) -> Dict[str, Any]:
-        """
-        Отримує інформацію про API.
-
-        Returns:
-            Інформація про API
-        """
-        try:
-            info = self.swagger_data.get("info", {})
-
-            return {
-                "title": info.get("title", ""),
-                "description": info.get("description", ""),
-                "version": info.get("version", ""),
-                "contact": info.get("contact", {}),
-                "license": info.get("license", {}),
-                "terms_of_service": info.get("termsOfService", ""),
-            }
-
-        except Exception as e:
-            logger.error(f"❌ Помилка отримання інформації про API: {e}")
-            return {}
-
-    def get_security_schemes(self) -> Dict[str, Any]:
-        """
-        Отримує security schemes з Swagger специфікації.
-
-        Returns:
-            Словник security schemes
-        """
-        try:
-            components = self.swagger_data.get("components", {})
-            security_schemes = components.get("securitySchemes", {})
-
-            return security_schemes
-
-        except Exception as e:
-            logger.error(f"❌ Помилка отримання security schemes: {e}")
-            return {}
-
-    def create_enhanced_endpoint_chunks(self) -> List[Dict[str, Any]]:
-        """
-        Створює покращені chunks для embeddings.
-
-        Returns:
-            Список chunks з метаданими
-        """
-        chunks = []
-
-        try:
-            endpoints = self.get_endpoints()
-            base_url = self.get_base_url()
-
-            for endpoint in endpoints:
-                # Створюємо текст для embedding
-                text_parts = []
-
-                # Основна інформація
-                text_parts.append(f"Endpoint: {endpoint['method']} {endpoint['path']}")
-
-                if endpoint["summary"]:
-                    text_parts.append(f"Summary: {endpoint['summary']}")
-
-                if endpoint["description"]:
-                    text_parts.append(f"Description: {endpoint['description']}")
-
-                if endpoint["operation_id"]:
-                    text_parts.append(f"Operation ID: {endpoint['operation_id']}")
-
-                # Параметри
-                if endpoint["parameters"]:
-                    text_parts.append("Parameters:")
-                    for param in endpoint["parameters"]:
-                        param_text = f"  - {param['name']} ({param['in']})"
-                        if param["required"]:
-                            param_text += " [required]"
-                        if param["description"]:
-                            param_text += f": {param['description']}"
-                        text_parts.append(param_text)
-
-                # Відповіді
-                if endpoint["responses"]:
-                    text_parts.append("Responses:")
-                    for response in endpoint["responses"]:
-                        response_text = f"  - {response['status_code']}"
-                        if response["description"]:
-                            response_text += f": {response['description']}"
-                        text_parts.append(response_text)
-
-                # Теги
-                if endpoint["tags"]:
-                    text_parts.append(f"Tags: {', '.join(endpoint['tags'])}")
-
-                # Security
-                if endpoint["security"]:
-                    text_parts.append(f"Security: {endpoint['security']}")
-
-                # Deprecated
-                if endpoint["deprecated"]:
-                    text_parts.append("⚠️ This endpoint is deprecated")
-
-                # Об'єднуємо текст
-                text = "\n".join(text_parts)
-
-                # Створюємо metadata
-                metadata = {
-                    "path": endpoint["path"],
-                    "method": endpoint["method"],
-                    "summary": endpoint["summary"],
-                    "operation_id": endpoint["operation_id"],
-                    "tags": endpoint["tags"],
-                    "deprecated": endpoint["deprecated"],
-                    "base_url": base_url,
-                    "full_url": f"{base_url}{endpoint['path']}" if base_url else endpoint["path"],
-                }
-
-                chunks.append({"text": text, "metadata": metadata})
-
-            logger.info(f"✅ Створено {len(chunks)} chunks для embeddings")
-            return chunks
-
-        except Exception as e:
-            logger.error(f"❌ Помилка створення chunks: {e}")
-            return []
-
-    def get_full_url(self, path: str) -> str:
-        """
-        Отримує повний URL для endpoint.
-
-        Args:
-            path: Шлях endpoint
-
-        Returns:
-            Повний URL
-        """
-        base_url = self.get_base_url()
-        if base_url:
-            # Видаляємо trailing slash з base_url якщо є
-            if base_url.endswith("/"):
-                base_url = base_url[:-1]
-
-            # Додаємо leading slash до path якщо немає
-            if not path.startswith("/"):
-                path = "/" + path
-
-            return base_url + path
-
-        return path
+    
+    def _enrich_endpoints_with_schemas(self, endpoints: List[Dict[str, Any]], schemas: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Збагачує ендпоінти інформацією про схеми."""
+        enriched_endpoints = []
+        
+        for endpoint in endpoints:
+            try:
+                # Додаємо інформацію про схеми параметрів
+                enriched_params = []
+                for param in endpoint.get("parameters", []):
+                    enriched_param = param.copy()
+                    if "schema" in param and param["schema"]:
+                        schema_ref = param["schema"].get("$ref", "")
+                        if schema_ref:
+                            schema_name = schema_ref.split("/")[-1]
+                            if schema_name in schemas:
+                                enriched_param["schema_details"] = schemas[schema_name]
+                    enriched_params.append(enriched_param)
+                
+                # Додаємо інформацію про схеми відповідей
+                enriched_responses = {}
+                for status_code, response in endpoint.get("responses", {}).items():
+                    enriched_response = response.copy()
+                    if "schema" in response and response["schema"]:
+                        schema_ref = response["schema"].get("$ref", "")
+                        if schema_ref:
+                            schema_name = schema_ref.split("/")[-1]
+                            if schema_name in schemas:
+                                enriched_response["schema_details"] = schemas[schema_name]
+                    enriched_responses[status_code] = enriched_response
+                
+                # Створюємо збагачений ендпоінт
+                enriched_endpoint = endpoint.copy()
+                enriched_endpoint["parameters"] = enriched_params
+                enriched_endpoint["responses"] = enriched_responses
+                
+                enriched_endpoints.append(enriched_endpoint)
+                
+            except Exception as e:
+                logger.warning(f"Помилка збагачення ендпоінту {endpoint.get('path', '')}: {e}")
+                enriched_endpoints.append(endpoint)
+        
+        return enriched_endpoints
