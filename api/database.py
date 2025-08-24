@@ -53,5 +53,6 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-# Створюємо таблиці при імпорті модуля
-create_tables()
+# Створюємо таблиці при імпорті модуля (тільки якщо не тестуємо)
+if not os.getenv("TESTING"):
+    create_tables()

@@ -83,6 +83,61 @@ test-db-all: ## Run all database tests
 	python -m pytest tests/test_database_integration.py tests/test_database_queries.py -v --tb=short
 
 # Docker тести
+docker-test: ## Run all tests in Docker
+	@echo "🐳 Запуск всіх тестів в Docker..."
+	docker-compose -f docker-compose.test.yml up test --build --exit-code-from test
+
+docker-test-simple: ## Run simple tests in Docker
+	@echo "🐳 Запуск простих тестів в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/test_basic.py tests/test_rag_simple.py tests/test_config.py tests/test_swagger_error_handler_simple.py -v
+
+docker-test-clickone: ## Run Clickone Shop API tests in Docker
+	@echo "🐳 Запуск тестів Clickone Shop API в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/test_clickone_shop_api.py tests/test_clickone_shop_integration.py -v
+
+docker-test-clickone-real: ## Run Clickone Shop API real integration tests in Docker
+	@echo "🐳 Запуск реальних інтеграційних тестів Clickone Shop API в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/test_clickone_shop_integration_real.py -v -s
+
+docker-test-rag-real: ## Run RAG tests with real PostgreSQL database in Docker
+	@echo "🐳 Запуск RAG тестів з реальною PostgreSQL базою в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/test_rag_real_database.py -v -s
+
+docker-test-openai-errors: ## Run OpenAI model error tests in Docker
+	@echo "🐳 Запуск тестів помилок OpenAI моделі в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/test_openai_model_errors.py -v -s
+
+docker-start-real-db: ## Start real PostgreSQL database with pgvector
+	@echo "🗄️ Запуск реальної PostgreSQL бази з pgvector..."
+	docker-compose -f docker-compose.real-db.yml up -d postgres-real
+	@echo "⏳ Чекаємо готовності бази..."
+	@until docker-compose -f docker-compose.real-db.yml exec postgres-real pg_isready -U postgres -d ai_swagger_bot_test; do sleep 2; done
+	@echo "✅ База готова до роботи"
+
+docker-stop-real-db: ## Stop real PostgreSQL database
+	@echo "🛑 Зупинка реальної PostgreSQL бази..."
+	docker-compose -f docker-compose.real-db.yml down
+
+docker-test-with-real-db: ## Run tests with real database
+	@echo "🔗 Запуск тестів з реальною базою даних..."
+	docker-compose -f docker-compose.real-db.yml run --rm test-with-real-db python -m pytest tests/test_rag_real_database.py -v -s
+
+docker-logs-real-db: ## Show logs from real database
+	@echo "📋 Логи реальної бази даних..."
+	docker-compose -f docker-compose.real-db.yml logs -f
+
+docker-test-all: ## Run all tests in Docker
+	@echo "🐳 Запуск всіх тестів в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/ -v
+
+docker-test-unit: ## Run unit tests in Docker
+	@echo "🐳 Запуск unit тестів в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/ -v -m "not integration"
+
+docker-test-integration: ## Run integration tests in Docker
+	@echo "🐳 Запуск інтеграційних тестів в Docker..."
+	docker-compose -f docker-compose.test.yml run --rm test python -m pytest tests/ -v -m "integration"
+
 docker-test-integration: ## Run integration tests in Docker (with database)
 	@echo "🐳 Запуск інтеграційних тестів в Docker..."
 	docker-compose -f docker-compose.integration.yml up --build --abort-on-container-exit
@@ -98,7 +153,32 @@ run: ## Запустити Streamlit додаток
 
 run-api: ## Запустити FastAPI сервіс
 	@echo "🚀 Запуск FastAPI сервісу..."
-	$(PYTHON_VENV) -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
+	$(PYTHON_VENV) -m uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Docker запуск проекту
+docker-run: ## Запустити проект в Docker
+	@echo "🐳 Запуск проекту в Docker..."
+	docker-compose up --build
+
+docker-run-api: ## Запустити тільки API в Docker
+	@echo "🐳 Запуск API в Docker..."
+	docker-compose up api --build
+
+docker-run-frontend: ## Запустити тільки frontend в Docker
+	@echo "🐳 Запуск frontend в Docker..."
+	docker-compose up frontend --build
+
+docker-stop: ## Зупинити Docker контейнери
+	@echo "🛑 Зупинка Docker контейнерів..."
+	docker-compose down
+
+docker-logs: ## Показати логи Docker контейнерів
+	@echo "📋 Логи Docker контейнерів..."
+	docker-compose logs -f
+
+docker-demo-clickone: ## Демонстрація роботи з Clickone Shop API
+	@echo "🚀 Демонстрація роботи з Clickone Shop API..."
+	docker-compose -f docker-compose.test.yml run --rm test python examples/clickone_shop_demo.py
 
 create-admin: ## Створити адміністратора
 	@echo "👤 Створення адміністратора..."

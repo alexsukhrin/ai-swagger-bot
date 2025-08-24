@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  postgres-real:
+    image: pgvector/pgvector:pg16
+    container_name: ai-swagger-bot-postgres-real
+    environment:
+      POSTGRES_DB: ai_swagger_bot_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5433:5432"  # Використовуємо інший порт, щоб не конфліктувати з основною базою
+    volumes:
+      - postgres_real_data:/var/lib/postgresql/data
+      - ./init-real-db.sql:/docker-entrypoint-initdb.d/init-real-db.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_swagger_bot_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ai-swagger-bot-network
+
+  test-with-real-db:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: ai-swagger-bot-test-real-db
+    environment:
+      POSTGRES_HOST: postgres-real
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ai_swagger_bot_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-test_key}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-3.5-turbo}
+      PYTHONPATH: /app
+      TESTING: true
+    volumes:
+      - .:/app
+      - ./examples:/app/examples
+    depends_on:
+      postgres-real:
+        condition: service_healthy
+    networks:
+      - ai-swagger-bot-network
+    command: tail -f /dev/null  # Тримаємо контейнер живим для тестування
+
+volumes:
+  postgres_real_data:
+
+networks:
+  ai-swagger-bot-network:
+    driver: bridge

@@ -12,7 +12,6 @@ from api.auth import get_password_hash
 # Імпортуємо моделі
 from api.models import (
     ApiEmbedding,
-    ApiToken,
     Base,
     ChatMessage,
     ChatSession,

@@ -16,7 +16,6 @@ from api.main import app
 # Імпортуємо моделі та API
 from api.models import (
     ApiEmbedding,
-    ApiToken,
     Base,
     ChatMessage,
     ChatSession,
