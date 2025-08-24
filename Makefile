@@ -447,3 +447,50 @@ help-dev: ## Довідка для розробників
 	@echo "  make check          - Повна перевірка"
 	@echo "  make clean          - Очистити проект"
 	@echo "  make docs           - Створити документацію"
+	@echo ""
+	@echo "Streamlit команди:"
+	@echo "  make streamlit-up    - Запустити Streamlit додаток"
+	@echo "  make streamlit-down  - Зупинити Streamlit додаток"
+	@echo "  make streamlit-logs  - Переглянути логи Streamlit"
+	@echo "  make streamlit-status- Перевірити статус Streamlit"
+	@echo "  make streamlit-restart - Перезапустити Streamlit"
+	@echo "  make streamlit-test    - Тестувати Streamlit демо"
+	@echo "  make streamlit-demo    - Швидкий демо тест"
+	@echo "  make ai-demo          - Демо AI бота"
+	@echo "  make ai-interactive   - Інтерактивне демо AI бота"
+	@echo "  make ai-simple        - Простий демо AI бота"
+	@echo "  make ai-working       - Робочий демо AI бота"
+
+# Streamlit команди
+streamlit-up:
+	docker-compose -f docker-compose.streamlit.yml up --build -d
+
+streamlit-down:
+	docker-compose -f docker-compose.streamlit.yml down
+
+streamlit-logs:
+	docker logs -f ai-swagger-bot-streamlit-demo
+
+streamlit-status:
+	docker ps | grep streamlit
+
+streamlit-restart:
+	docker-compose -f docker-compose.streamlit.yml restart
+
+streamlit-test:
+	python test_streamlit_demo.py
+
+streamlit-demo:
+	python demo_streamlit.py
+
+ai-demo:
+	python demo_ai_bot.py
+
+ai-interactive:
+	python demo_ai_interactive.py
+
+ai-simple:
+	python demo_ai_simple.py
+
+ai-working:
+	python demo_ai_working.py

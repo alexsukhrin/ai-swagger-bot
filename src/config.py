@@ -27,6 +27,12 @@ class Config:
     SWAGGER_SPEC_PATH = os.getenv("SWAGGER_SPEC_PATH", "examples/swagger_specs/shop_api.json")
     BASE_URL = os.getenv("BASE_URL", "https://db62d2b2c3a5.ngrok-free.app/api")
 
+    # Clickone Shop API налаштування
+    CLICKONE_SHOP_API_URL = "https://api.oneshop.click"
+    CLICKONE_SHOP_SWAGGER_URL = "https://api.oneshop.click/docs/ai-json"
+    CLICKONE_SHOP_JWT_TOKEN = os.getenv("CLICKONE_JWT_TOKEN")
+    CLICKONE_SHOP_JWT_SECRET = os.getenv("JWT_SECRET_KEY")
+
     # База даних налаштування
     DATABASE_URL = os.getenv(
         "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:5432/ai_swagger_bot"
