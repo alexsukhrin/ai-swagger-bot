@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 import yaml
 
+from .ai_error_handler import APIError, get_ai_error_handler
 from .clickone_prompt_manager import ClickonePromptManager, get_clickone_prompt_manager
 
 
@@ -41,6 +42,7 @@ class ClickoneShopAgent:
     def __init__(self, config: Optional[ClickoneAPIConfig] = None):
         self.config = config or ClickoneAPIConfig()
         self.prompt_manager = get_clickone_prompt_manager()
+        self.ai_error_handler = get_ai_error_handler()
         self.jwt_token: Optional[str] = None
         self.session = requests.Session()
         self.session.headers.update(
@@ -109,11 +111,31 @@ class ClickoneShopAgent:
                 except json.JSONDecodeError:
                     error_message = response.text or f"HTTP {response.status_code}"
 
+                # Створюємо об'єкт помилки для AI аналізу
+                api_error = APIError(
+                    error_message=error_message,
+                    status_code=response.status_code,
+                    endpoint=endpoint,
+                    method=method,
+                    input_data=data,
+                    response_data=error_data if "error_data" in locals() else None,
+                )
+
+                # Аналізуємо помилку за допомогою AI
+                ai_fix = self.ai_error_handler.analyze_api_error(api_error)
+
+                # Створюємо зрозуміле повідомлення для користувача
+                user_friendly_message = self.ai_error_handler.get_user_friendly_message(
+                    api_error, ai_fix
+                )
+
+                # Додаємо AI виправлення до відповіді
                 return ClickoneAPIResponse(
                     success=False,
                     status_code=response.status_code,
-                    error=error_message,
+                    error=user_friendly_message,
                     headers=dict(response.headers),
+                    data={"ai_fix": ai_fix.__dict__},  # Додаємо AI виправлення
                 )
 
         except requests.exceptions.RequestException as e:
@@ -476,6 +498,73 @@ class ClickoneShopAgent:
     def export_prompts(self, output_file: str = "clickone_prompts_export.yaml") -> bool:
         """Експортує промпти"""
         return self.prompt_manager.export_prompts(output_file)
+
+    def get_validation_rules(self, entity_type: str = "category") -> str:
+        """Отримує правила валідації для сутності за допомогою AI"""
+        return self.ai_error_handler.get_validation_rules("/api/categories", entity_type)
+
+    def retry_with_ai_fix(self, original_response: ClickoneAPIResponse) -> ClickoneAPIResponse:
+        """
+        Спроба повторного виконання з виправленням від AI
+
+        Args:
+            original_response: Початкова відповідь з помилкою
+
+        Returns:
+            Нова спроба з виправленими даними
+        """
+        if original_response.success or "ai_fix" not in (original_response.data or {}):
+            return original_response
+
+        ai_fix_data = original_response.data["ai_fix"]
+        fixed_data = ai_fix_data.get("fixed_data", {})
+
+        if not fixed_data:
+            print("⚠️ AI не зміг запропонувати виправлення")
+            return original_response
+
+        print(f"🔄 Спроба повторного виконання з виправленням від AI...")
+        print(f"📝 Виправлені дані: {fixed_data}")
+
+        # Отримуємо оригінальні дані з помилки
+        original_data = ai_fix_data.get("input_data", {})
+
+        # Замінюємо тільки виправлені поля
+        retry_data = {**original_data, **fixed_data}
+
+        # Визначаємо метод та ендпоінт на основі оригінального запиту
+        # Це спрощена логіка - в реальному проекті потрібно зберігати більше контексту
+        if "create" in str(original_response.error).lower():
+            return self.create_category(retry_data)
+        elif "update" in str(original_response.error).lower():
+            # Потрібно знати ID для оновлення
+            print("⚠️ Для оновлення потрібен ID категорії")
+            return original_response
+        else:
+            print("⚠️ Невідомий тип операції для повторної спроби")
+            return original_response
+
+    def get_ai_error_analysis(self, error_message: str, input_data: Dict[str, Any]) -> str:
+        """
+        Отримує аналіз помилки від AI
+
+        Args:
+            error_message: Повідомлення про помилку
+            input_data: Вхідні дані, які викликали помилку
+
+        Returns:
+            Аналіз помилки українською мовою
+        """
+        api_error = APIError(
+            error_message=error_message,
+            status_code=400,  # Приблизний код помилки
+            endpoint="/api/categories",
+            method="POST",
+            input_data=input_data,
+        )
+
+        ai_fix = self.ai_error_handler.analyze_api_error(api_error)
+        return self.ai_error_handler.get_user_friendly_message(api_error, ai_fix)
 
 
 # Глобальний екземпляр агента
