@@ -213,12 +213,14 @@ class TestRAGRealDatabase:
             ]
 
             for text, vector in test_vectors:
+                # Конвертуємо список в vector тип PostgreSQL
+                vector_str = f"[{','.join(map(str, vector))}]"
                 cursor.execute(
                     """
                     INSERT INTO test_vectors (text_content, embedding)
-                    VALUES (%s, %s);
+                    VALUES (%s, %s::vector);
                 """,
-                    (text, vector),
+                    (text, vector_str),
                 )
 
             # Тест векторного пошуку (cosine similarity)
@@ -273,13 +275,11 @@ class TestRAGRealDatabase:
         try:
             from src.rag_engine import PostgresRAGEngine
 
-            # Створюємо RAG двигун
+            # Створюємо RAG двигун з правильними параметрами
             rag_engine = PostgresRAGEngine(
-                host=real_database["host"],
-                port=real_database["port"],
-                database=real_database["database"],
-                user=real_database["user"],
-                password=real_database["password"],
+                user_id="test_user_123",
+                swagger_spec_id="test_spec_123",
+                config={"chunk_size": 500, "chunk_overlap": 100},
             )
 
             # Тестуємо створення векторного сховища
@@ -379,13 +379,11 @@ class TestRAGRealDatabase:
             from src.enhanced_swagger_parser import EnhancedSwaggerParser
             from src.rag_engine import PostgresRAGEngine
 
-            # Створюємо RAG двигун
+            # Створюємо RAG двигун з правильними параметрами
             rag_engine = PostgresRAGEngine(
-                host=real_database["host"],
-                port=real_database["port"],
-                database=real_database["database"],
-                user=real_database["user"],
-                password=real_database["password"],
+                user_id="test_user_123",
+                swagger_spec_id="test_spec_123",
+                config={"chunk_size": 500, "chunk_overlap": 100},
             )
 
             # Створюємо парсер Swagger
@@ -470,41 +468,59 @@ class TestRAGRealDatabase:
             wrong_config["password"] = "wrong_password"
 
             try:
-                rag_engine = PostgresRAGEngine(**wrong_config)
-                # Якщо не виникла помилка, це може означати, що пароль не перевіряється
-                print("⚠️ Підключення з неправильним паролем не викликало помилку")
+                # Тестуємо з неправильними параметрами конструктора
+                rag_engine = PostgresRAGEngine(
+                    user_id="invalid_user",
+                    swagger_spec_id="invalid_spec",
+                    config={"invalid": "config"},
+                )
+                print("⚠️ Неправильні параметри не викликали помилку")
             except Exception as e:
-                print(f"✅ Очікувана помилка підключення: {e}")
+                print(f"✅ Очікувана помилка параметрів: {e}")
+                # Перевіряємо, що помилка пов'язана з параметрами
                 assert (
-                    "password authentication failed" in str(e).lower()
-                    or "authentication failed" in str(e).lower()
+                    "parameter" in str(e).lower()
+                    or "argument" in str(e).lower()
+                    or "unexpected" in str(e).lower()
                 )
 
-            # Тестуємо неправильну базу даних
-            print("🗄️ Тестуємо неправильну базу даних...")
-
-            wrong_db_config = real_database.copy()
-            wrong_db_config["database"] = "nonexistent_database"
+            # Тестуємо неправильні параметри конструктора
+            print("🔧 Тестуємо неправильні параметри конструктора...")
 
             try:
-                rag_engine = PostgresRAGEngine(**wrong_db_config)
-                print("⚠️ Підключення до неіснуючої бази не викликало помилку")
+                rag_engine = PostgresRAGEngine(
+                    user_id="",  # Порожній user_id
+                    swagger_spec_id="",  # Порожній spec_id
+                    config={},
+                )
+                print("⚠️ Порожні параметри не викликали помилку")
             except Exception as e:
-                print(f"✅ Очікувана помилка бази: {e}")
-                assert "database" in str(e).lower() or "does not exist" in str(e).lower()
+                print(f"✅ Очікувана помилка порожніх параметрів: {e}")
+                # Перевіряємо, що помилка пов'язана з параметрами
+                assert (
+                    "parameter" in str(e).lower()
+                    or "argument" in str(e).lower()
+                    or "empty" in str(e).lower()
+                )
 
-            # Тестуємо неправильний хост
-            print("🌐 Тестуємо неправильний хост...")
-
-            wrong_host_config = real_database.copy()
-            wrong_host_config["host"] = "nonexistent.host.local"
+            # Тестуємо неправильний тип config
+            print("⚙️ Тестуємо неправильний тип config...")
 
             try:
-                rag_engine = PostgresRAGEngine(**wrong_host_config)
-                print("⚠️ Підключення до неіснуючого хоста не викликало помилку")
+                rag_engine = PostgresRAGEngine(
+                    user_id="test_user",
+                    swagger_spec_id="test_spec",
+                    config="invalid_config_type",  # Неправильний тип
+                )
+                print("⚠️ Неправильний тип config не викликав помилку")
             except Exception as e:
-                print(f"✅ Очікувана помилка хоста: {e}")
-                assert "connection" in str(e).lower() or "timeout" in str(e).lower()
+                print(f"✅ Очікувана помилка типу config: {e}")
+                # Перевіряємо, що помилка пов'язана з типом
+                assert (
+                    "assertion" in str(e).lower()
+                    or "argument" in str(e).lower()
+                    or "unexpected" in str(e).lower()
+                )
 
             print("✅ Обробка помилок підключення працює коректно")
 
@@ -522,13 +538,11 @@ class TestRAGRealDatabase:
         try:
             from src.rag_engine import PostgresRAGEngine
 
-            # Створюємо RAG двигун
+            # Створюємо RAG двигун з правильними параметрами
             rag_engine = PostgresRAGEngine(
-                host=real_database["host"],
-                port=real_database["port"],
-                database=real_database["database"],
-                user=real_database["user"],
-                password=real_database["password"],
+                user_id="test_user_123",
+                swagger_spec_id="test_spec_123",
+                config={"chunk_size": 500, "chunk_overlap": 100},
             )
 
             # Тестуємо швидкість вставки

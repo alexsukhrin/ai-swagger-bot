@@ -185,3 +185,6 @@ trivy-results.sarif
 
 # Docker
 .dockerignore
+docker-compose.override.yml
+docker-compose.*.yml
+!docker-compose.yml

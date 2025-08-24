@@ -29,11 +29,18 @@ def real_agent():
 @pytest.fixture
 def test_category_data():
     """Тестові дані для категорії"""
-    timestamp = int(time.time())
+    # Використовуємо тільки літери для назви
+    import random
+    import string
+
+    # Генеруємо випадкову назву з літер
+    letters = string.ascii_letters
+    random_name = "".join(random.choice(letters) for _ in range(10))
+
     return {
-        "name": f"Test Category {timestamp}",
-        "slug": f"test-category-{timestamp}",
-        "description": f"Тестова категорія створена {timestamp}",
+        "name": f"Test{random_name}",  # Тільки літери
+        "slug": f"test-{random_name.lower()}",
+        "description": "Тестова категорія для тестування",
         "isActive": True,
         "sortOrder": 1,
     }
